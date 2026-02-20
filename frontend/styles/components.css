@@ -1,0 +1,93 @@
+/* ===== Component-level supplemental styles =====
+   Global base styles live in app/globals.css.
+   Use this file for any additional shared component styles
+   that don't fit neatly into a component's <style jsx> block.
+============================================== */
+
+/* ----- Link Grid Layout ----- */
+.link-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+/* ----- Page Section Spacing ----- */
+.page-section {
+    margin-bottom: 2.5rem;
+}
+
+/* ----- Skeleton Loader ----- */
+.skeleton {
+    background: linear-gradient(90deg,
+            var(--color-surface) 25%,
+            var(--color-surface-2) 50%,
+            var(--color-surface) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s infinite;
+    border-radius: var(--radius-sm);
+}
+
+@keyframes skeleton-shimmer {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+.skeleton-card {
+    height: 240px;
+    border-radius: var(--radius-md);
+}
+
+/* ----- Tooltip ----- */
+.tooltip-wrapper {
+    position: relative;
+    display: inline-flex;
+}
+
+.tooltip-wrapper::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    font-size: 0.78rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--transition);
+    z-index: 200;
+}
+
+.tooltip-wrapper:hover::after {
+    opacity: 1;
+}
+
+/* ----- Divider ----- */
+.divider {
+    border: none;
+    border-top: 1px solid var(--color-border);
+    margin: 2rem 0;
+}
+
+/* ----- Tag ----- */
+.tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 99px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    background: var(--color-surface-2);
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+}
