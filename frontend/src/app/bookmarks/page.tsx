@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { fetchBookmarks, fetchCategories } from "@/lib/api";
 import { Bookmark, CategoryCount } from "@/lib/types";
 import SearchBar from "@/components/SearchBar";
@@ -17,22 +17,34 @@ export default function BookmarksPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const latestRequest = useRef<symbol | null>(null);
 
   const loadBookmarks = useCallback(async () => {
+    const reqId = Symbol();
+    latestRequest.current = reqId;
     setLoading(true);
     try {
-      const data = await fetchBookmarks({ search, category, platform, page, limit: 18 });
+      // fetch 9 items per page so pagination kicks in after nine results
+      const data = await fetchBookmarks({ search, category, platform, page, limit: 9 });
+      if (latestRequest.current !== reqId) return;
+
       setBookmarks(data.bookmarks);
       setTotalPages(data.totalPages);
+      if (page > data.totalPages) {
+        setPage(data.totalPages || 1);
+      }
     } catch (err) {
-      console.error(err);
+      if (latestRequest.current === reqId) console.error(err);
     }
-    setLoading(false);
+    if (latestRequest.current === reqId) setLoading(false);
   }, [search, category, platform, page]);
 
   useEffect(() => {
     loadBookmarks();
   }, [loadBookmarks]);
+
+  // NOTE: URL sync removed to avoid router-triggered re-renders that reset page
+
 
   useEffect(() => {
     fetchCategories().then(setCategories).catch(console.error);
@@ -89,24 +101,44 @@ export default function BookmarksPage() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3 mt-8">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-            className="px-4 py-2 rounded-xl glass text-sm font-medium text-muted hover:text-foreground disabled:opacity-30 transition"
-          >
-            Previous
-          </button>
-          <span className="text-sm text-muted">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
-            className="px-4 py-2 rounded-xl glass text-sm font-medium text-muted hover:text-foreground disabled:opacity-30 transition"
-          >
-            Next
-          </button>
+        <div className="flex flex-col items-center gap-4 mt-8">
+          {/* simple prev/next controls */}
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={loading || page <= 1}
+              className="px-4 py-2 rounded-xl glass text-sm font-medium text-muted hover:text-foreground disabled:opacity-30 transition"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-muted">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={loading || page >= totalPages}
+              className="px-4 py-2 rounded-xl glass text-sm font-medium text-muted hover:text-foreground disabled:opacity-30 transition"
+            >
+              Next
+            </button>
+          </div>
+
+          {/* numeric page selection */}
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPage(p)}
+                disabled={loading}
+                className={`px-3 py-1 rounded-md text-sm font-medium transition 
+                  ${p === page
+                    ? "bg-secondary text-white"
+                    : "text-muted hover:text-foreground hover:bg-white/5"}`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

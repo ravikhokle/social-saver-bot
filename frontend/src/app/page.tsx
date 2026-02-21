@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { fetchBookmarks, fetchStats, fetchCategories } from "@/lib/api";
 import { Bookmark, Stats, CategoryCount } from "@/lib/types";
 import StatsCards from "@/components/StatsCards";
@@ -19,22 +19,32 @@ export default function DashboardPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const latestRequest = useRef<symbol | null>(null);
 
   const loadBookmarks = useCallback(async () => {
+    const reqId = Symbol();
+    latestRequest.current = reqId;
     setLoading(true);
     try {
-      const data = await fetchBookmarks({ search, category, platform, page });
+      // make limit consistent with other page so pagination behaves predictably
+      const data = await fetchBookmarks({ search, category, platform, page, limit: 9 });
+      if (latestRequest.current !== reqId) return;
       setBookmarks(data.bookmarks);
       setTotalPages(data.totalPages);
+      if (page > data.totalPages) {
+        setPage(data.totalPages || 1);
+      }
     } catch (err) {
-      console.error(err);
+      if (latestRequest.current === reqId) console.error(err);
     }
-    setLoading(false);
+    if (latestRequest.current === reqId) setLoading(false);
   }, [search, category, platform, page]);
 
   useEffect(() => {
     loadBookmarks();
   }, [loadBookmarks]);
+
+  // NOTE: URL sync removed to avoid router-triggered re-renders that reset page
 
   useEffect(() => {
     fetchStats().then(setStats).catch(console.error);
@@ -104,7 +114,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-center gap-3 mt-8">
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
+            disabled={loading || page <= 1}
             className="px-4 py-2 rounded-xl glass text-sm font-medium text-muted hover:text-foreground disabled:opacity-30 transition"
           >
             Previous
@@ -114,7 +124,7 @@ export default function DashboardPage() {
           </span>
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
+            disabled={loading || page >= totalPages}
             className="px-4 py-2 rounded-xl glass text-sm font-medium text-muted hover:text-foreground disabled:opacity-30 transition"
           >
             Next

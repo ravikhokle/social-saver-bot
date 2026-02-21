@@ -3,7 +3,8 @@ import Bookmark from "../models/Bookmark.js";
 // GET /api/bookmarks
 export async function listBookmarks(req, res) {
   try {
-    const { search, category, platform, page = 1, limit = 12 } = req.query;
+    // default to 9 results per page so pagination appears once there are more
+    const { search, category, platform, page = 1, limit = 9 } = req.query;
     const filter = {};
 
     if (category && category !== "All") {

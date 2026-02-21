@@ -148,10 +148,21 @@ async function extractTwitter(url) {
     const $ = cheerio.load(data.html || "");
     const tweetText = $("p").first().text();
 
+    // Try scraping OG/twitter meta tags to find an image thumbnail for tweets
+    let thumbnail = "";
+    try {
+      const scraped = await scrapeMetaTags(url);
+      if (scraped && scraped.thumbnail) {
+        thumbnail = scraped.thumbnail;
+      }
+    } catch (e) {
+      // ignore scraping errors
+    }
+
     return {
       title: (tweetText || "").slice(0, 100) || "Tweet",
       caption: tweetText || "",
-      thumbnail: "",
+      thumbnail,
       author: data.author_name || "",
       embed_url: url,
       raw_data: data,
@@ -159,14 +170,26 @@ async function extractTwitter(url) {
   } catch (err) {
     console.log("Twitter oembed failed:", err.message);
     // Use URL-based fallback
-    return {
-      title: "Tweet by " + extractTwitterHandle(url),
-      caption: "Saved tweet from Twitter/X",
-      thumbnail: "",
-      author: extractTwitterHandle(url),
-      embed_url: url,
-      raw_data: {},
-    };
+    try {
+      const scraped = await scrapeMetaTags(url);
+      return {
+        title: scraped.title || "Tweet by " + extractTwitterHandle(url),
+        caption: scraped.caption || "Saved tweet from Twitter/X",
+        thumbnail: scraped.thumbnail || "",
+        author: scraped.author || extractTwitterHandle(url),
+        embed_url: url,
+        raw_data: scraped.raw_data || {},
+      };
+    } catch (e) {
+      return {
+        title: "Tweet by " + extractTwitterHandle(url),
+        caption: "Saved tweet from Twitter/X",
+        thumbnail: "",
+        author: extractTwitterHandle(url),
+        embed_url: url,
+        raw_data: {},
+      };
+    }
   }
 }
 
