@@ -15,64 +15,105 @@ interface StatsCardsProps {
 }
 
 export default function StatsCards({ stats }: StatsCardsProps) {
-  const platformIcons: Record<string, React.ReactNode> = {
-    instagram: <Instagram className="w-4 h-4 text-pink-400" />,
-    twitter: <Twitter className="w-4 h-4 text-blue-400" />,
-    youtube: <Youtube className="w-4 h-4 text-red-400" />,
-    article: <FileText className="w-4 h-4 text-emerald-400" />,
-  };
+  const total = stats.total || 1; // avoid divide-by-zero
+
+  const items = [
+    {
+      icon: <Bookmark className="w-5 h-5 text-white" />,
+      label: "Total Saved",
+      value: stats.total,
+      bar: 100,
+      iconBg: "from-primary to-secondary",
+      barColor: "from-primary to-secondary",
+      hero: true,
+    },
+    ...(stats.topCategories.length > 0
+      ? [{
+        icon: <TrendingUp className="w-5 h-5 text-white" />,
+        label: "Top: " + stats.topCategories[0].name,
+        value: stats.topCategories[0].count,
+        bar: Math.round((stats.topCategories[0].count / total) * 100),
+        iconBg: "from-violet-500 to-purple-500",
+        barColor: "from-violet-500 to-purple-400",
+      }]
+      : []),
+    {
+      icon: <Instagram className="w-5 h-5 text-white" />,
+      label: "Instagram",
+      value: stats.platforms.instagram ?? 0,
+      bar: Math.round(((stats.platforms.instagram ?? 0) / total) * 100),
+      iconBg: "from-pink-500 to-rose-500",
+      barColor: "from-pink-500 to-rose-400",
+    },
+    {
+      icon: <Twitter className="w-5 h-5 text-white" />,
+      label: "Twitter",
+      value: stats.platforms.twitter ?? 0,
+      bar: Math.round(((stats.platforms.twitter ?? 0) / total) * 100),
+      iconBg: "from-sky-500 to-blue-500",
+      barColor: "from-sky-500 to-blue-400",
+    },
+    {
+      icon: <Youtube className="w-5 h-5 text-white" />,
+      label: "YouTube",
+      value: stats.platforms.youtube ?? 0,
+      bar: Math.round(((stats.platforms.youtube ?? 0) / total) * 100),
+      iconBg: "from-red-500 to-orange-500",
+      barColor: "from-red-500 to-orange-400",
+    },
+    {
+      icon: <FileText className="w-5 h-5 text-white" />,
+      label: "Articles",
+      value: stats.platforms.article ?? 0,
+      bar: Math.round(((stats.platforms.article ?? 0) / total) * 100),
+      iconBg: "from-emerald-500 to-teal-500",
+      barColor: "from-emerald-500 to-teal-400",
+    },
+
+  ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      {/* Total bookmarks */}
-      <div className="glass rounded-2xl p-5 pulse-glow">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center">
-            <Bookmark className="w-5 h-5 text-primary" />
-          </div>
-          <span className="text-xs text-muted font-medium uppercase tracking-wide">
-            Total Saved
-          </span>
-        </div>
-        <p className="text-3xl font-bold gradient-text">{stats.total}</p>
-      </div>
+    <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {items.map((item, i) => (
+        <div
+          key={i}
+          className={`relative glass rounded-2xl p-4 overflow-hidden transition-all duration-300 hover:scale-[1.03] hover:shadow-lg group ${item.hero ? "pulse-glow" : "card-hover"
+            }`}
+        >
+          {/* Subtle background gradient blob */}
+          <div
+            className={`absolute -top-4 -right-4 w-16 h-16 rounded-full bg-gradient-to-br ${item.iconBg} opacity-10 blur-xl group-hover:opacity-20 transition-opacity`}
+          />
 
-      {/* Platforms */}
-      {Object.entries(stats.platforms).map(([platform, count]) => (
-        <div key={platform} className="glass rounded-2xl p-5 card-hover">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center">
-              {platformIcons[platform] || (
-                <FileText className="w-5 h-5 text-muted" />
-              )}
-            </div>
-            <span className="text-xs text-muted font-medium uppercase tracking-wide capitalize">
-              {platform}
-            </span>
+          {/* Icon */}
+          <div
+            className={`w-9 h-9 rounded-xl bg-gradient-to-br ${item.iconBg} flex items-center justify-center mb-3 shadow-lg`}
+          >
+            {item.icon}
           </div>
-          <p className="text-3xl font-bold text-foreground">{count}</p>
+
+          {/* Number */}
+          <p
+            className={`text-2xl font-extrabold leading-none mb-1 ${item.hero ? "gradient-text" : "text-foreground"
+              }`}
+          >
+            {item.value}
+          </p>
+
+          {/* Label */}
+          <p className="text-[11px] text-muted uppercase tracking-wide font-medium truncate">
+            {item.label}
+          </p>
+
+          {/* Progress bar */}
+          <div className="mt-3 h-1 rounded-full bg-white/5 overflow-hidden">
+            <div
+              className={`h-full rounded-full bg-gradient-to-r ${item.barColor} transition-all duration-700`}
+              style={{ width: `${Math.max(item.bar, 4)}%` }}
+            />
+          </div>
         </div>
       ))}
-
-      {/* Top category */}
-      {stats.topCategories.length > 0 && (
-        <div className="glass rounded-2xl p-5 card-hover">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl bg-secondary/15 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-secondary" />
-            </div>
-            <span className="text-xs text-muted font-medium uppercase tracking-wide">
-              Top Category
-            </span>
-          </div>
-          <p className="text-xl font-bold text-foreground">
-            {stats.topCategories[0].name}
-          </p>
-          <p className="text-xs text-muted mt-1">
-            {stats.topCategories[0].count} items
-          </p>
-        </div>
-      )}
     </div>
   );
 }

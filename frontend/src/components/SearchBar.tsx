@@ -1,7 +1,7 @@
 "use client";
 
 import { Search, X } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface SearchBarProps {
   value: string;
@@ -15,17 +15,25 @@ export default function SearchBar({
   placeholder = "Search bookmarks... (e.g. pasta, workout, coding)",
 }: SearchBarProps) {
   const [local, setLocal] = useState(value);
+  // Keep a stable ref to the latest onChange so the debounce effect
+  // does NOT depend on the callback reference (which changes every render).
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
 
+  // Sync local input if the parent resets the value externally
   useEffect(() => {
     setLocal(value);
   }, [value]);
 
+  // Debounce: only fires when the user actually types (local changes)
   useEffect(() => {
     const timer = setTimeout(() => {
-      onChange(local);
+      onChangeRef.current(local);
     }, 400);
     return () => clearTimeout(timer);
-  }, [local, onChange]);
+  }, [local]); // ← only `local` here, NOT `onChange`
 
   return (
     <div className="relative w-full max-w-xl">
@@ -41,7 +49,7 @@ export default function SearchBar({
         <button
           onClick={() => {
             setLocal("");
-            onChange("");
+            onChangeRef.current("");
           }}
           className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-white/10 transition"
         >

@@ -26,14 +26,10 @@ export default function DashboardPage() {
     latestRequest.current = reqId;
     setLoading(true);
     try {
-      // make limit consistent with other page so pagination behaves predictably
       const data = await fetchBookmarks({ search, category, platform, page, limit: 9 });
       if (latestRequest.current !== reqId) return;
       setBookmarks(data.bookmarks);
-      setTotalPages(data.totalPages);
-      if (page > data.totalPages) {
-        setPage(data.totalPages || 1);
-      }
+      setTotalPages(data.totalPages ?? 1);
     } catch (err) {
       if (latestRequest.current === reqId) console.error(err);
     }
@@ -71,8 +67,7 @@ export default function DashboardPage() {
           Your <span className="gradient-text">Knowledge Base</span>
         </h1>
         <p className="text-sm text-muted max-w-lg">
-          Everything you&apos;ve saved from Instagram, Twitter, and the web — organized and
-          searchable.
+          Everything you&apos;ve saved from Instagram, Twitter, and the web — organized and searchable.
         </p>
       </div>
 
@@ -111,23 +106,38 @@ export default function DashboardPage() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3 mt-8">
+        <div className="flex items-center justify-center gap-2 mt-8 flex-wrap">
+          {/* Previous */}
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={loading || page <= 1}
             className="px-4 py-2 rounded-xl glass text-sm font-medium text-muted hover:text-foreground disabled:opacity-30 transition"
           >
-            Previous
+            ← Prev
           </button>
-          <span className="text-sm text-muted">
-            Page {page} of {totalPages}
-          </span>
+
+          {/* Page number buttons */}
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+            <button
+              key={pageNum}
+              onClick={() => setPage(pageNum)}
+              disabled={loading}
+              className={`w-9 h-9 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 ${pageNum === page
+                ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30 scale-105"
+                : "glass text-muted hover:text-foreground hover:bg-white/10"
+                }`}
+            >
+              {pageNum}
+            </button>
+          ))}
+
+          {/* Next */}
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={loading || page >= totalPages}
             className="px-4 py-2 rounded-xl glass text-sm font-medium text-muted hover:text-foreground disabled:opacity-30 transition"
           >
-            Next
+            Next →
           </button>
         </div>
       )}
