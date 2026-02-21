@@ -64,7 +64,7 @@ async function extractInstagram(url) {
         if (!thumbnail && scraped.thumbnail) {
           thumbnail = scraped.thumbnail;
         }
-      } catch {}
+      } catch { }
     }
 
     // Use caption text as title if it's a real sentence
@@ -85,7 +85,7 @@ async function extractInstagram(url) {
           u.pathname = u.pathname.replace(/\/?$/, "") + "/embed";
         }
         embedUrl = u.toString();
-      } catch {}
+      } catch { }
     }
 
     return {
@@ -106,7 +106,7 @@ async function extractInstagram(url) {
         u.pathname = u.pathname.replace(/\/?$/, "") + "/embed";
       }
       scraped.embed_url = u.toString();
-    } catch {}
+    } catch { }
     // Detect reel vs post for fallback
     const isReel = /instagram\.com\/reel\//i.test(url);
     // Fix title — reject shortcode slugs and generic text
@@ -202,6 +202,52 @@ function extractTwitterHandle(url) {
 }
 
 /**
+ * Extract YouTube video ID from any YouTube URL
+ */
+function extractYouTubeId(url) {
+  try {
+    const u = new URL(url);
+    // youtu.be/VIDEO_ID
+    if (u.hostname === "youtu.be") return u.pathname.slice(1).split("/")[0];
+    // youtube.com/shorts/VIDEO_ID
+    if (u.pathname.startsWith("/shorts/")) return u.pathname.split("/")[2];
+    // youtube.com/watch?v=VIDEO_ID
+    return u.searchParams.get("v") || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extract content from a YouTube URL — scrapes OG tags + builds embed URL
+ */
+async function extractYouTube(url) {
+  const videoId = extractYouTubeId(url);
+  const embedUrl = videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+
+  try {
+    const scraped = await scrapeMetaTags(url);
+    return {
+      title: scraped.title || "YouTube Video",
+      caption: scraped.caption || "",
+      thumbnail: scraped.thumbnail || (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : ""),
+      author: scraped.author || "",
+      embed_url: embedUrl,
+      raw_data: scraped.raw_data || {},
+    };
+  } catch {
+    return {
+      title: "YouTube Video",
+      caption: "",
+      thumbnail: videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : "",
+      author: "",
+      embed_url: embedUrl,
+      raw_data: {},
+    };
+  }
+}
+
+/**
  * Extract content from a generic article/blog URL
  */
 async function extractArticle(url) {
@@ -287,6 +333,9 @@ async function extractContent(url) {
       break;
     case "twitter":
       content = await extractTwitter(url);
+      break;
+    case "youtube":
+      content = await extractYouTube(url);
       break;
     default:
       content = await extractArticle(url);
