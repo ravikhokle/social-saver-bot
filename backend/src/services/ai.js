@@ -158,116 +158,182 @@ function parseAIResponse(raw) {
 }
 
 /**
+ * Clean raw caption/title — strip Instagram engagement noise like "12K likes, 41 comments"
+ */
+function cleanCaption(text) {
+  if (!text) return "";
+  return text
+    // Remove engagement counts: "12K likes, 41 comments - " prefix
+    .replace(/^\d[\d.,KkMm]*\s*(likes?|views?|comments?|shares?)[^-\n]*[-–]\s*/gi, "")
+    // Remove trailing "on <date>:" patterns from oEmbed
+    .replace(/\s+on\s+\w+ \d{1,2},\s*\d{4}:\s*/gi, ": ")
+    // Remove excessive whitespace
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Extract a readable title from cleaned caption text
+ */
+function titleFromCaption(caption) {
+  if (!caption) return "";
+  // If caption contains a colon (e.g. "Java Basics: ..."), use the part before it
+  const colonIdx = caption.indexOf(":");
+  if (colonIdx > 10 && colonIdx < 80) {
+    return caption.slice(0, colonIdx).trim();
+  }
+  // Use first sentence if short enough
+  const sentenceEnd = caption.search(/[.!?]/);
+  if (sentenceEnd > 10 && sentenceEnd < 80) {
+    return caption.slice(0, sentenceEnd).trim();
+  }
+  // Fall back to first 8 words
+  const words = caption.split(" ").slice(0, 8).join(" ");
+  return words.length > 3 ? words : "";
+}
+
+/**
+ * Extract hashtags from raw caption text — these make great tags
+ */
+function extractHashtags(text) {
+  if (!text) return [];
+  const tags = (text.match(/#[a-zA-Z][a-zA-Z0-9_]*/g) || [])
+    .map((t) => t.slice(1).toLowerCase())
+    // Filter out generic noise tags
+    .filter((t) => !["instagram", "reel", "reels", "instagood", "viral", "fyp", "foryou", "trending", "explorepage", "follow", "like", "love", "share"].includes(t));
+  return [...new Set(tags)];
+}
+
+/**
  * Smart keyword-based fallback when AI is unavailable
  */
-function fallbackAnalysis(text, platform, url) {
-  const lower = (text + " " + (url || "")).toLowerCase();
+function fallbackAnalysis(rawText, platform, url) {
+  const cleaned = cleanCaption(rawText);
+  const lower = (cleaned + " " + (url || "")).toLowerCase();
 
-  // attempt simple title generation: use first 6 words of text or hostname
-  let title = "";
-  if (text) {
-    title = text.split(" ").slice(0, 6).join(" ");
-  }
+  // --- Title ---
+  let title = titleFromCaption(cleaned);
   if (!title && url) {
     try {
-      title = new URL(url).hostname;
-    } catch {}
+      const u = new URL(url);
+      const slug = u.pathname.split("/").filter(Boolean).pop() || "";
+      title = slug.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || u.hostname;
+    } catch { }
   }
-  if (!title) title = "Untitled";
+  if (!title) title = "Saved Content";
 
   const categories = {
     Fitness: [
       "workout", "gym", "exercise", "fitness", "muscle", "cardio", "yoga",
-      "running", "abs", "bodybuilding", "stretch", "health", "weight",
-      "training", "sport", "protein", "diet", "hiit", "crossfit",
+      "running", "abs", "bodybuilding", "stretch", "health", "weight loss",
+      "training", "sport", "protein", "diet", "hiit", "crossfit", "squat",
+      "push up", "pull up", "calories", "reps", "sets", "plank", "deadlift",
     ],
     Coding: [
-      "code", "programming", "developer", "javascript", "python", "react",
+      "code", "coding", "programming", "developer", "javascript", "python", "react",
       "api", "github", "software", "algorithm", "frontend", "backend",
-      "devops", "debug", "tech", "html", "css", "node", "database",
-      "typescript", "rust", "golang", "nextjs", "deploy",
+      "devops", "debug", "html", "css", "node", "database", "typescript",
+      "rust", "golang", "nextjs", "deploy", "java", "kotlin", "swift",
+      "flutter", "docker", "kubernetes", "git", "open source", "terminal",
+      "function", "class", "object", "array", "loop", "variable", "boolean",
+      "string[]", "main method", "static void", "public class",
     ],
     Food: [
       "recipe", "cook", "food", "meal", "pasta", "restaurant", "eat",
       "kitchen", "bake", "delicious", "dinner", "lunch", "breakfast",
-      "snack", "chef", "vegan", "pizza", "salad", "healthy eating",
+      "snack", "chef", "vegan", "pizza", "salad", "healthy eating", "cuisine",
+      "ingredient", "flavour", "flavor", "dessert", "smoothie", "coffee",
     ],
     Travel: [
       "travel", "trip", "destination", "flight", "hotel", "explore",
       "adventure", "tourism", "beach", "mountain", "vacation", "hiking",
-      "backpack", "road trip", "scenic", "wanderlust",
+      "road trip", "wanderlust", "itinerary", "passport", "visa",
+      "backpacking", "hostel", "resort", "sightseeing", "landmark",
     ],
     Design: [
       "design", "ui", "ux", "figma", "typography", "layout", "creative",
       "graphic", "branding", "logo", "illustration", "photoshop", "canva",
-      "wireframe", "prototype", "color palette",
+      "wireframe", "prototype", "color palette", "design system", "font",
+      "visual", "mockup", "component", "animation", "motion",
     ],
     Music: [
       "music", "song", "album", "playlist", "concert", "artist", "beat",
       "rapper", "singer", "guitar", "lyrics", "melody", "spotify",
-      "hip hop", "rock", "pop", "jazz",
+      "hip hop", "rock", "pop", "jazz", "producer", "studio", "track",
+      "bass", "drum", "piano", "vocals", "mixtape",
     ],
     Fashion: [
-      "fashion", "outfit", "style", "clothing", "wear", "trend", "dress",
-      "shoes", "streetwear", "luxury", "accessories", "wardrobe", "model",
+      "fashion", "outfit", "ootd", "style", "clothing", "wear", "trend",
+      "dress", "shoes", "streetwear", "luxury", "accessories", "wardrobe",
+      "model", "lookbook", "collection", "brand", "couture",
     ],
     Education: [
-      "learn", "study", "course", "tutorial", "guide", "tips", "howto",
+      "learn", "study", "course", "tutorial", "guide", "tips", "how to",
       "lesson", "teach", "knowledge", "university", "student", "lecture",
-      "skill", "certification", "bootcamp",
+      "skill", "certification", "bootcamp", "explained", "basics",
+      "beginner", "advanced", "concept", "theory", "exam", "quiz",
     ],
     Business: [
       "startup", "business", "entrepreneur", "marketing", "money", "invest",
       "finance", "stock", "crypto", "revenue", "growth", "sales", "brand",
-      "linkedin", "saas", "product", "founder",
+      "linkedin", "saas", "product", "founder", "profit", "passive income",
+      "e-commerce", "shopify", "monetize", "client", "freelance",
     ],
     Entertainment: [
       "movie", "film", "show", "netflix", "anime", "meme", "funny",
       "comedy", "game", "gaming", "celebrity", "viral", "drama",
-      "series", "trailer", "review",
+      "series", "trailer", "review", "reaction", "prank", "challenge",
     ],
     Science: [
       "science", "research", "physics", "biology", "chemistry", "space",
-      "nasa", "experiment", "discovery", "data", "ai", "machine learning",
-      "neuroscience", "climate", "quantum",
+      "nasa", "experiment", "discovery", "data", "artificial intelligence",
+      "machine learning", "neuroscience", "climate", "quantum", "rocket",
+      "atom", "dna", "evolution", "mathematics",
     ],
     Lifestyle: [
-      "lifestyle", "motivation", "mindset", "self-improvement", "morning routine",
+      "lifestyle", "motivation", "mindset", "self improvement", "morning routine",
       "productivity", "wellness", "meditation", "gratitude", "habit",
-      "minimalism", "home decor", "relationship",
+      "minimalism", "home decor", "relationship", "mental health", "anxiety",
+      "confidence", "journaling", "routine", "balance", "self care",
     ],
   };
 
   // Score each category
   let bestCategory = "Uncategorized";
   let bestScore = 0;
-  let matchedTags = [];
+  let matchedKeywords = [];
 
   for (const [cat, keywords] of Object.entries(categories)) {
     const matches = keywords.filter((k) => lower.includes(k));
     if (matches.length > bestScore) {
       bestScore = matches.length;
       bestCategory = cat;
-      matchedTags = matches;
+      matchedKeywords = matches;
     }
   }
 
-  // Platform-specific tags
-  const platformTags = {
-    instagram: ["instagram", "reel"],
-    twitter: ["twitter", "tweet"],
-    youtube: ["youtube", "video"],
-    article: ["article", "blog"],
-  };
-  const pTags = platformTags[platform] || [];
+  // --- Tags: prefer real hashtags from caption, backfill with matched keywords ---
+  const hashTags = extractHashtags(rawText);
+  const keywordTags = matchedKeywords
+    .filter((k) => k.length > 3 && !k.includes(" "))
+    .slice(0, 3);
+  const allTags = [...new Set([...hashTags.slice(0, 4), ...keywordTags])].slice(0, 5);
 
-  // Combine matched keyword tags + platform tags, deduplicated
-  const allTags = [...new Set([...matchedTags.slice(0, 3), ...pTags])].slice(0, 5);
-
-  // Generate a reasonable summary from the text
-  let summary = text.slice(0, 150).trim();
-  if (text.length > 150) summary += "...";
-  if (!summary) summary = `Saved ${platform || "link"} content`;
+  // --- Summary: build a clean, readable sentence ---
+  let summary = "";
+  if (cleaned) {
+    // Strip hashtag block from the end (lines full of hashtags)
+    const noHashtags = cleaned.replace(/(#\w+\s*){3,}/g, "").trim();
+    // Take up to 180 chars, ending at a word boundary
+    if (noHashtags.length <= 180) {
+      summary = noHashtags;
+    } else {
+      const cut = noHashtags.slice(0, 180);
+      const lastSpace = cut.lastIndexOf(" ");
+      summary = (lastSpace > 100 ? cut.slice(0, lastSpace) : cut) + "…";
+    }
+  }
+  if (!summary) summary = `A ${bestCategory !== "Uncategorized" ? bestCategory.toLowerCase() : platform || "web"} post saved from ${platform || "the web"}.`;
 
   return {
     title,

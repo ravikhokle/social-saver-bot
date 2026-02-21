@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bookmark, Sparkles, Home, PlusCircle } from "lucide-react";
+import { Sparkles, Home, PlusCircle } from "lucide-react";
 
 export default function Navbar() {
   const pathname = usePathname();
 
   const links = [
     { href: "/", label: "Dashboard", icon: Home },
-    { href: "/bookmarks", label: "Bookmarks", icon: Bookmark },
     { href: "/add", label: "Add Link", icon: PlusCircle },
   ];
 
@@ -38,11 +37,10 @@ export default function Navbar() {
                 <Link
                   key={href}
                   href={href}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    isActive
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${isActive
                       ? "bg-primary/15 text-primary"
                       : "text-muted hover:text-foreground hover:bg-white/5"
-                  }`}
+                    }`}
                 >
                   <Icon className="w-4 h-4" />
                   <span className="hidden sm:inline">{label}</span>
