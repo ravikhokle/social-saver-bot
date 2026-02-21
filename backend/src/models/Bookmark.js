@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 const bookmarkSchema = new mongoose.Schema(
   {
@@ -62,4 +62,4 @@ const bookmarkSchema = new mongoose.Schema(
 // Text index for search
 bookmarkSchema.index({ title: "text", caption: "text", summary: "text", tags: "text" });
 
-module.exports = mongoose.model("Bookmark", bookmarkSchema);
+export default mongoose.model("Bookmark", bookmarkSchema);

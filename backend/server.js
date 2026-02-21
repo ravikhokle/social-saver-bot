@@ -1,9 +1,9 @@
-require("dotenv").config();
-const express = require("express");
-const cors = require("cors");
-const { connectDb } = require("./src/db/database");
-const bookmarkRoutes = require("./src/routes/bookmarks");
-const webhookRoutes = require("./src/routes/webhook");
+import "dotenv/config";
+import express from "express";
+import cors from "cors";
+import { connectDb } from "./src/db/database.js";
+import bookmarkRoutes from "./src/routes/bookmarks.js";
+import webhookRoutes from "./src/routes/webhook.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;

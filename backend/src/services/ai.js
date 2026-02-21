@@ -1,6 +1,6 @@
 // switch to official Gemini SDK; still use axios for OpenAI
-const axios = require("axios");
-const { GoogleGenAI } = require("@google/genai");
+import axios from "axios";
+import { GoogleGenAI } from "@google/genai";
 
 /**
  * Delay helper for retry/backoff
@@ -14,7 +14,8 @@ const geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
  * Use AI to auto-tag and summarize content
  */
 async function analyzeContent({ title, caption, platform, url }) {
-  const textToAnalyze = `${title} ${caption}`.trim();
+  // Include caption, title, and URL so AI has maximum context
+  const textToAnalyze = [caption, title, url].filter(Boolean).join(" ").trim();
 
   if (!textToAnalyze) {
     return {
@@ -70,12 +71,20 @@ async function analyzeContent({ title, caption, platform, url }) {
   return fallbackAnalysis(textToAnalyze, platform, url);
 }
 
-const SYSTEM_PROMPT = `You are a content classifier. Given social media content, respond ONLY with valid JSON (no markdown, no code fences):
+const SYSTEM_PROMPT = `You are a content classifier. Given social media content (caption, title, URL), respond ONLY with valid JSON (no markdown, no code fences):
 {
+  "title": "A short, descriptive title based on the actual content/caption (NOT generic like 'Instagram Reel')",
   "category": "one of: Fitness, Coding, Food, Travel, Design, Music, Fashion, Education, Business, Entertainment, Science, Lifestyle, Uncategorized",
   "tags": ["tag1", "tag2", "tag3"],
-  "summary": "A single concise sentence summarizing the content"
-}`;
+  "summary": "A single concise sentence summarizing the content. Use key words from the caption so the user can search for it later."
+}
+
+IMPORTANT:
+- The title MUST describe what the content is about, using keywords from the caption.
+- The summary MUST include important words from the caption so it is searchable.
+- Tags MUST include relevant keywords from the caption text.
+- If caption is empty, infer meaning from the URL or author name.
+- NEVER use generic titles like "Instagram Reel" or "Social Media Post".`;
 
 async function analyzeWithOpenAI(text, platform) {
   const res = await axios.post(
@@ -141,6 +150,7 @@ function parseAIResponse(raw) {
   raw = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
   const parsed = JSON.parse(raw);
   return {
+    title: parsed.title || "",
     category: parsed.category || "Uncategorized",
     tags: Array.isArray(parsed.tags) ? parsed.tags.slice(0, 5) : [],
     summary: parsed.summary || "",
@@ -152,6 +162,18 @@ function parseAIResponse(raw) {
  */
 function fallbackAnalysis(text, platform, url) {
   const lower = (text + " " + (url || "")).toLowerCase();
+
+  // attempt simple title generation: use first 6 words of text or hostname
+  let title = "";
+  if (text) {
+    title = text.split(" ").slice(0, 6).join(" ");
+  }
+  if (!title && url) {
+    try {
+      title = new URL(url).hostname;
+    } catch {}
+  }
+  if (!title) title = "Untitled";
 
   const categories = {
     Fitness: [
@@ -248,10 +270,11 @@ function fallbackAnalysis(text, platform, url) {
   if (!summary) summary = `Saved ${platform || "link"} content`;
 
   return {
+    title,
     category: bestCategory,
     tags: allTags,
     summary,
   };
 }
 
-module.exports = { analyzeContent };
+export { analyzeContent };

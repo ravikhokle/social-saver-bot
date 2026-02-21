@@ -1,5 +1,5 @@
-const axios = require("axios");
-const cheerio = require("cheerio");
+import axios from "axios";
+import * as cheerio from "cheerio";
 
 /**
  * Detect platform from URL
@@ -43,21 +43,88 @@ async function extractInstagram(url) {
       },
     });
 
+    // Detect reel vs post
+    const isReel = /instagram\.com\/reel\//i.test(url);
+    const isPost = /instagram\.com\/p\//i.test(url);
+
+    // Build a readable title — oEmbed title is the caption, author_name is the username
+    let title = "";
+    let caption = data.title || "";
+    const author = data.author_name || "";
+
+    // If oEmbed caption is empty, try scraping og:description for the real caption
+    let thumbnail = data.thumbnail_url || "";
+    if (!caption || !thumbnail) {
+      try {
+        console.log("Instagram oEmbed missing caption/thumbnail, trying scrape...");
+        const scraped = await scrapeMetaTags(url);
+        if (!caption && scraped.caption) {
+          caption = scraped.caption;
+        }
+        if (!thumbnail && scraped.thumbnail) {
+          thumbnail = scraped.thumbnail;
+        }
+      } catch {}
+    }
+
+    // Use caption text as title if it's a real sentence
+    if (caption && caption.length > 3 && !/^[A-Za-z0-9_-]{5,20}$/.test(caption)) {
+      title = caption.length > 100 ? caption.slice(0, 100) + "…" : caption;
+    } else if (author) {
+      title = isReel ? `${author}'s Reel` : `${author}'s Post`;
+    } else {
+      title = isReel ? "Instagram Reel" : "Instagram Post";
+    }
+
+    // Embed URL — only for posts, never for reels
+    let embedUrl = null;
+    if (!isReel) {
+      try {
+        const u = new URL(url);
+        if (!u.pathname.endsWith("/embed")) {
+          u.pathname = u.pathname.replace(/\/?$/, "") + "/embed";
+        }
+        embedUrl = u.toString();
+      } catch {}
+    }
+
     return {
-      title: data.title || titleFromUrl(url),
-      caption: data.title || "",
-      thumbnail: data.thumbnail_url || "",
-      author: data.author_name || "",
-      embed_url: url,
+      title,
+      caption,
+      thumbnail,
+      author,
+      embed_url: embedUrl,
       raw_data: data,
     };
   } catch (err) {
     console.log("Instagram oembed failed, trying scrape fallback...");
     const scraped = await scrapeMetaTags(url);
-    // If scrape also returns garbage, use a clean default
-    if (!scraped.title || scraped.title === "Untitled") {
-      scraped.title = "Instagram Post";
+    // adjust embed_url just like the normal path
+    try {
+      const u = new URL(url);
+      if (!u.pathname.endsWith("/embed")) {
+        u.pathname = u.pathname.replace(/\/?$/, "") + "/embed";
+      }
+      scraped.embed_url = u.toString();
+    } catch {}
+    // Detect reel vs post for fallback
+    const isReel = /instagram\.com\/reel\//i.test(url);
+    // Fix title — reject shortcode slugs and generic text
+    if (
+      !scraped.title ||
+      scraped.title === "Untitled" ||
+      /^[A-Za-z0-9_-]{5,20}$/.test(scraped.title)
+    ) {
+      if (isReel) {
+        scraped.title = scraped.author ? `${scraped.author}'s Reel` : "Instagram Reel";
+      } else {
+        scraped.title = scraped.author ? `${scraped.author}'s Post` : "Instagram Post";
+      }
       scraped.caption = scraped.caption || "Saved from Instagram";
+    }
+    // Never embed reels
+    if (isReel) {
+      scraped.embed_url = null;
     }
     // Clean up captions that are just raw HTML/JS
     if (scraped.caption && scraped.caption.length > 500) {
@@ -205,4 +272,4 @@ async function extractContent(url) {
   return { ...content, platform };
 }
 
-module.exports = { extractContent, detectPlatform };
+export { extractContent, detectPlatform };

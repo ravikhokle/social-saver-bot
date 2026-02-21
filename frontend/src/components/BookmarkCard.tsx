@@ -103,8 +103,22 @@ export default function BookmarkCard({ bookmark, onDelete }: BookmarkCardProps) 
           </div>
         </div>
 
-        {/* Thumbnail */}
-        {bookmark.thumbnail && (
+        {/* Embed video if available (only YouTube) */}
+        {bookmark.embedUrl &&
+          bookmark.platform === "youtube" &&
+          bookmark.embedUrl.includes("embed") && (
+            <div className="relative w-full h-40 mb-3">
+              <iframe
+                src={bookmark.embedUrl}
+                frameBorder="0"
+                allow="autoplay; encrypted-media"
+                allowFullScreen
+                className="w-full h-full"
+              ></iframe>
+            </div>
+          )}
+        {/* Instagram reels: always show thumbnail, never embed */}
+        {bookmark.platform === "instagram" && bookmark.thumbnail && (
           <div className="relative w-full h-40 rounded-xl overflow-hidden mb-3 bg-card">
             <img
               src={bookmark.thumbnail}
@@ -116,6 +130,26 @@ export default function BookmarkCard({ bookmark, onDelete }: BookmarkCardProps) 
             />
           </div>
         )}
+
+        {/* Thumbnail (skip if we already rendered embed) */}
+        {bookmark.thumbnail &&
+          bookmark.platform !== "instagram" &&
+          !(
+            bookmark.embedUrl &&
+            bookmark.platform === "youtube" &&
+            bookmark.embedUrl.includes("embed")
+          ) && (
+            <div className="relative w-full h-40 rounded-xl overflow-hidden mb-3 bg-card">
+              <img
+                src={bookmark.thumbnail}
+                alt={bookmark.title}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
+              />
+            </div>
+          )}
 
         {/* Title */}
         <h3 className="text-sm font-semibold text-foreground line-clamp-2 mb-2 leading-snug">

@@ -45,8 +45,7 @@ export async function handleWhatsAppWebhook(req, res) {
     }
 
     // Extract URL from message
-    const urlMatch = messageText.match(/https?:\/\/[^
-    \\s]+/i);
+    const urlMatch = messageText.match(/https?:\/\/[^\s]+/i);
 
     let replyMessage;
 
@@ -72,15 +71,44 @@ export async function handleWhatsAppWebhook(req, res) {
           url,
         });
 
+        // Determine final title
+        let finalTitle = content.title || "";
+        const isReel = /instagram\.com\/reel\//i.test(url);
+        const isJunkTitle = !finalTitle || /^[A-Za-z0-9_-]{5,20}$/.test(finalTitle) || /%%|Untitled|Instagram Reel|Instagram Post/i.test(finalTitle);
+
+        // For Instagram reels, always prefer AI title since reels have no native title
+        if (content.platform === "instagram" && isReel) {
+          finalTitle = analysis.title || finalTitle;
+        } else if (isJunkTitle) {
+          finalTitle = analysis.title || finalTitle || "Untitled";
+        }
+        // Last resort fallback
+        if (!finalTitle || /^Instagram (Reel|Post)$/i.test(finalTitle)) {
+          finalTitle = content.author
+            ? `${content.author}'s ${isReel ? "Reel" : "Post"}`
+            : analysis.title || "Untitled";
+        }
+
+        // finalize category if AI left it uncategorized for reels
+        let finalCategory = analysis.category || "Uncategorized";
+        // Instagram reels: always Entertainment
+        if (
+          finalCategory === "Uncategorized" &&
+          content.platform === "instagram" &&
+          /instagram\.com\/reel\//i.test(url)
+        ) {
+          finalCategory = "Entertainment";
+        }
+
         // Save to MongoDB
         const bookmark = await Bookmark.create({
           user: user._id,
           url,
           platform: content.platform,
-          title: content.title || "Untitled",
+          title: finalTitle,
           caption: content.caption || "",
           summary: analysis.summary || "",
-          category: analysis.category || "Uncategorized",
+          category: finalCategory,
           tags: analysis.tags || [],
           thumbnail: content.thumbnail || "",
           embedUrl: content.embed_url || url,
@@ -98,7 +126,9 @@ export async function handleWhatsAppWebhook(req, res) {
         };
 
         replyMessage =
-          `${platformEmoji[content.platform] || "🔖"} Got it! Saved to your *${analysis.category}* bucket.\n\n` +
+          `${platformEmoji[content.platform] || "🔖"} Got it! Saved to your *${finalCategory}* bucket.\n\n` +
+          `📌 Title: ${finalTitle}\n` +
+          `📂 Category: ${finalCategory}\n\n` +
           `📝 ${analysis.summary}\n\n` +
           `🏷️ Tags: ${(analysis.tags || []).join(", ") || "none"}\n\n` +
           `View your saved links at: ${process.env.FRONTEND_URL ||
@@ -142,15 +172,42 @@ export async function handleTestWebhook(req, res) {
       url,
     });
 
+    // Determine final title
+    let finalTitle = content.title || "";
+    const isReel = /instagram\.com\/reel\//i.test(url);
+    const isJunkTitle = !finalTitle || /^[A-Za-z0-9_-]{5,20}$/.test(finalTitle) || /%%|Untitled|Instagram Reel|Instagram Post/i.test(finalTitle);
+
+    // For Instagram reels, always prefer AI title since reels have no native title
+    if (content.platform === "instagram" && isReel) {
+      finalTitle = analysis.title || finalTitle;
+    } else if (isJunkTitle) {
+      finalTitle = analysis.title || finalTitle || "Untitled";
+    }
+    // Last resort fallback
+    if (!finalTitle || /^Instagram (Reel|Post)$/i.test(finalTitle)) {
+      finalTitle = content.author
+        ? `${content.author}'s ${isReel ? "Reel" : "Post"}`
+        : analysis.title || "Untitled";
+    }
+
+    // finalize category
+    let finalCategory = analysis.category || "Uncategorized";
+    if (
+      finalCategory === "Uncategorized" &&
+      content.platform === "instagram"
+    ) {
+      finalCategory = "Entertainment";
+    }
+
     // Save
     const bookmark = await Bookmark.create({
       user: user._id,
       url,
       platform: content.platform,
-      title: content.title || "Untitled",
+      title: finalTitle,
       caption: content.caption || "",
       summary: analysis.summary || "",
-      category: analysis.category || "Uncategorized",
+      category: finalCategory,
       tags: analysis.tags || [],
       thumbnail: content.thumbnail || "",
       embedUrl: content.embed_url || url,
