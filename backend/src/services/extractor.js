@@ -4,13 +4,17 @@ import _YTDlpWrapMod from "yt-dlp-wrap";
 // yt-dlp-wrap ships as CJS so the real class sits at .default.default under ESM
 const YTDlpWrap = _YTDlpWrapMod?.default?.default ?? _YTDlpWrapMod?.default ?? _YTDlpWrapMod;
 import { existsSync } from "fs";
-import { mkdir } from "fs/promises";
+import { mkdir, chmod } from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Store binary in project-level bin/ folder (writable on all hosts)
-const YTDLP_BIN_DIR = path.join(__dirname, "../../bin");
+// On Linux hosts (Render, Railway, etc.) the project dir is read-only after
+// deploy — /tmp is always writable. On Windows use the local bin/ folder.
+const YTDLP_BIN_DIR =
+  process.platform === "win32"
+    ? path.join(__dirname, "../../bin")
+    : "/tmp/yt-dlp-bin";
 const YTDLP_BINARY = path.join(
   YTDLP_BIN_DIR,
   process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp"
@@ -25,6 +29,10 @@ async function getYtDlp() {
     console.log("⬇️  yt-dlp binary not found — downloading from GitHub...");
     await mkdir(YTDLP_BIN_DIR, { recursive: true });
     await YTDlpWrap.downloadFromGithub(YTDLP_BINARY);
+    // Make the binary executable on Linux (required on Render / Railway)
+    if (process.platform !== "win32") {
+      await chmod(YTDLP_BINARY, 0o755);
+    }
     console.log("✅ yt-dlp binary ready at", YTDLP_BINARY);
   }
   _ytDlp = new YTDlpWrap(YTDLP_BINARY);
