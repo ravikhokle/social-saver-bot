@@ -4,7 +4,7 @@
 
 ## Demo
 
-📹 **Video Walkthrough:** [Add your screen recording link here]
+📹 **Video Walkthrough:** https://drive.google.com/file/d/14TcWye00d8qmsdTwQI2JbSdJwTxM8JIH/view?usp=sharing
 
 ---
 
