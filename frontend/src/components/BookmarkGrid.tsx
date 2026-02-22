@@ -53,6 +53,7 @@ interface BookmarkGridProps {
   platform: string;
   onPlatformChange: (platform: string) => void;
   onDelete: (id: string) => void;
+  onPin: (id: string, pinned: boolean) => void;
 }
 
 export default function BookmarkGrid({
@@ -60,6 +61,7 @@ export default function BookmarkGrid({
   platform,
   onPlatformChange,
   onDelete,
+  onPin,
 }: BookmarkGridProps) {
   const [randomBookmark, setRandomBookmark] = useState<Bookmark | null>(null);
   const [loadingRandom, setLoadingRandom] = useState(false);
@@ -126,7 +128,7 @@ export default function BookmarkGrid({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {bookmarks.map((bm) => (
-            <BookmarkCard key={bm._id} bookmark={bm} onDelete={onDelete} />
+            <BookmarkCard key={bm._id} bookmark={bm} onDelete={onDelete} onPin={onPin} />
           ))}
         </div>
       )}

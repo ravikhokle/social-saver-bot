@@ -85,20 +85,19 @@ export default function StatsCards({ stats }: StatsCardsProps) {
             className={`absolute -top-4 -right-4 w-16 h-16 rounded-full bg-gradient-to-br ${item.iconBg} opacity-10 blur-xl group-hover:opacity-20 transition-opacity`}
           />
 
-          {/* Icon */}
-          <div
-            className={`w-9 h-9 rounded-xl bg-gradient-to-br ${item.iconBg} flex items-center justify-center mb-3 shadow-lg`}
-          >
-            {item.icon}
+          {/* Icon + Number row */}
+          <div className="flex items-center gap-2.5 mb-2">
+            <div
+              className={`w-9 h-9 shrink-0 rounded-xl bg-gradient-to-br ${item.iconBg} flex items-center justify-center shadow-lg`}
+            >
+              {item.icon}
+            </div>
+            <p
+              className={`text-2xl font-extrabold leading-none ${item.hero ? "gradient-text" : "text-foreground"}`}
+            >
+              {item.value}
+            </p>
           </div>
-
-          {/* Number */}
-          <p
-            className={`text-2xl font-extrabold leading-none mb-1 ${item.hero ? "gradient-text" : "text-foreground"
-              }`}
-          >
-            {item.value}
-          </p>
 
           {/* Label */}
           <p className="text-[11px] text-muted uppercase tracking-wide font-medium truncate">

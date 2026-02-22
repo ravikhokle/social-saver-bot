@@ -4,8 +4,12 @@ import Bookmark from "../models/Bookmark.js";
 export async function listBookmarks(req, res) {
   try {
     // default to 9 results per page so pagination appears once there are more
-    const { search, category, platform, page = 1, limit = 9 } = req.query;
+    const { search, category, platform, page = 1, limit = 9, pinned } = req.query;
     const filter = {};
+
+    if (pinned === "true") {
+      filter.pinned = true;
+    }
 
     if (category && category !== "All") {
       filter.category = category;
@@ -24,7 +28,8 @@ export async function listBookmarks(req, res) {
     const [bookmarks, total] = await Promise.all([
       Bookmark.find(filter)
         .populate("user", "phone name")
-        .sort({ createdAt: -1 })
+        // pinned items should float to the top, then newest first
+        .sort({ pinned: -1, createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit))
         .lean(),
@@ -77,7 +82,7 @@ export async function getCategories(req, res) {
 // GET /api/bookmarks/stats
 export async function getStats(req, res) {
   try {
-    const [total, platforms, categories] = await Promise.all([
+    const [total, platforms, categories, pinnedCount] = await Promise.all([
       Bookmark.countDocuments(),
       Bookmark.aggregate([
         { $group: { _id: "$platform", count: { $sum: 1 } } },
@@ -87,10 +92,12 @@ export async function getStats(req, res) {
         { $sort: { count: -1 } },
         { $limit: 5 },
       ]),
+      Bookmark.countDocuments({ pinned: true }),
     ]);
 
     res.json({
       total,
+      pinned: pinnedCount,
       platforms: platforms.reduce((acc, p) => ({ ...acc, [p._id]: p.count }), {}),
       topCategories: categories.map((c) => ({ name: c._id, count: c.count })),
     });
@@ -115,9 +122,37 @@ export async function getBookmarkById(req, res) {
 // DELETE /api/bookmarks/:id
 export async function deleteBookmark(req, res) {
   try {
-    await Bookmark.findByIdAndDelete(req.params.id);
-    res.json({ message: "Deleted" });
+    const bookmark = await Bookmark.findByIdAndDelete(req.params.id);
+    if (!bookmark) return res.status(404).json({ error: "Not found" });
+    res.json({ success: true });
   } catch (err) {
+    console.error("Failed to delete bookmark:", err);
     res.status(500).json({ error: "Failed to delete bookmark" });
+  }
+}
+
+// PATCH /api/bookmarks/:id  (update fields such as pinned)
+export async function updateBookmark(req, res) {
+  try {
+    const updates = req.body || {};
+    const allowed = {};
+    if (typeof updates.pinned === "boolean") {
+      // Enforce max 3 pinned posts
+      if (updates.pinned === true) {
+        const pinnedCount = await Bookmark.countDocuments({ pinned: true });
+        if (pinnedCount >= 3) {
+          return res.status(400).json({ error: "You can pin at most 3 posts." });
+        }
+      }
+      allowed.pinned = updates.pinned;
+    }
+    const bookmark = await Bookmark.findByIdAndUpdate(req.params.id, allowed, {
+      new: true,
+    });
+    if (!bookmark) return res.status(404).json({ error: "Not found" });
+    res.json(bookmark);
+  } catch (err) {
+    console.error("Failed to update bookmark:", err);
+    res.status(500).json({ error: "Failed to update bookmark" });
   }
 }

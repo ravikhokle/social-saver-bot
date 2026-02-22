@@ -12,8 +12,10 @@ import {
   Clock,
   X,
   Maximize,
+  Pin,
+  PinOff,
 } from "lucide-react";
-import { deleteBookmark } from "@/lib/api";
+import { deleteBookmark, togglePin } from "@/lib/api";
 import { useState, useRef } from "react";
 
 const platformConfig = {
@@ -69,10 +71,13 @@ function getYouTubeEmbedUrl(url: string): string | null {
 interface BookmarkCardProps {
   bookmark: Bookmark;
   onDelete?: (id: string) => void;
+  onPin?: (id: string, pinned: boolean) => void;
 }
 
-export default function BookmarkCard({ bookmark, onDelete }: BookmarkCardProps) {
+export default function BookmarkCard({ bookmark, onDelete, onPin }: BookmarkCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isPinning, setIsPinning] = useState(false);
+  const [pinned, setPinned] = useState(bookmark.pinned ?? false);
   const [showModal, setShowModal] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -89,6 +94,21 @@ export default function BookmarkCard({ bookmark, onDelete }: BookmarkCardProps) 
     bookmark.platform === "youtube"
       ? getYouTubeEmbedUrl(bookmark.embedUrl || bookmark.url) ?? getYouTubeEmbedUrl(bookmark.url)
       : null;
+
+  const handlePin = async () => {
+    setIsPinning(true);
+    const next = !pinned;
+    setPinned(next); // optimistic
+    try {
+      await togglePin(bookmark._id, next);
+      onPin?.(bookmark._id, next);
+    } catch (err: any) {
+      setPinned(!next); // revert on error
+      if (err?.message) alert(err.message);
+    } finally {
+      setIsPinning(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!confirm("Delete this bookmark?")) return;
@@ -110,6 +130,13 @@ export default function BookmarkCard({ bookmark, onDelete }: BookmarkCardProps) 
       {/* Top gradient bar */}
       <div className={`h-1 bg-gradient-to-r ${config.color}`} />
 
+      {/* Pinned badge */}
+      {pinned && (
+        <div className="absolute top-3 right-3 z-10 p-1.5 rounded-full bg-yellow-400/15 border border-yellow-400/30">
+          <Pin className="w-3 h-3 text-yellow-400" />
+        </div>
+      )}
+
       <div className="p-5">
         {/* Header: Platform + Actions */}
         <div className="flex items-center justify-between mb-3">
@@ -120,6 +147,22 @@ export default function BookmarkCard({ bookmark, onDelete }: BookmarkCardProps) 
             </span>
           </div>
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={handlePin}
+              disabled={isPinning}
+              className={`p-1.5 rounded-lg transition-colors ${
+                pinned
+                  ? "text-yellow-400 hover:bg-yellow-400/20"
+                  : "hover:bg-white/10 text-muted hover:text-yellow-400"
+              }`}
+              title={pinned ? "Unpin" : "Pin"}
+            >
+              {pinned ? (
+                <PinOff className="w-3.5 h-3.5" />
+              ) : (
+                <Pin className="w-3.5 h-3.5" />
+              )}
+            </button>
             <a
               href={bookmark.url}
               target="_blank"

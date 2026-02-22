@@ -1,6 +1,35 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
-import { spawn } from "child_process";
+import _YTDlpWrapMod from "yt-dlp-wrap";
+// yt-dlp-wrap ships as CJS so the real class sits at .default.default under ESM
+const YTDlpWrap = _YTDlpWrapMod?.default?.default ?? _YTDlpWrapMod?.default ?? _YTDlpWrapMod;
+import { existsSync } from "fs";
+import { mkdir } from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Store binary in project-level bin/ folder (writable on all hosts)
+const YTDLP_BIN_DIR = path.join(__dirname, "../../bin");
+const YTDLP_BINARY = path.join(
+  YTDLP_BIN_DIR,
+  process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp"
+);
+
+let _ytDlp = null;
+
+/** Lazy-init: download the binary once if missing, then cache the wrapper. */
+async function getYtDlp() {
+  if (_ytDlp) return _ytDlp;
+  if (!existsSync(YTDLP_BINARY)) {
+    console.log("⬇️  yt-dlp binary not found — downloading from GitHub...");
+    await mkdir(YTDLP_BIN_DIR, { recursive: true });
+    await YTDlpWrap.downloadFromGithub(YTDLP_BINARY);
+    console.log("✅ yt-dlp binary ready at", YTDLP_BINARY);
+  }
+  _ytDlp = new YTDlpWrap(YTDLP_BINARY);
+  return _ytDlp;
+}
 
 /**
  * Detect platform from URL
@@ -31,44 +60,90 @@ function titleFromUrl(url) {
 }
 
 /**
- * Use yt-dlp to extract the direct CDN video URL for an Instagram post/reel.
- * Returns null gracefully if yt-dlp is not installed or the post is private.
+ * Use yt-dlp-wrap to extract the direct CDN video URL for an Instagram post/reel.
+ * Downloads the standalone yt-dlp binary on first call — no Python required.
+ * Returns null gracefully if extraction fails or the post is private.
  */
 async function extractInstagramVideoUrl(url) {
-  return new Promise((resolve) => {
-    try {
-      const proc = spawn("python", [
-        "-m", "yt_dlp",
+  try {
+    const ytDlp = await getYtDlp();
+    // execPromise returns stdout as a string
+    const output = await Promise.race([
+      ytDlp.execPromise([
         "--get-url",
         "--format", "mp4",
         "--no-playlist",
         url,
-      ]);
-      let output = "";
-      let errOutput = "";
-      proc.stdout.on("data", (d) => (output += d.toString()));
-      proc.stderr.on("data", (d) => (errOutput += d.toString()));
-      proc.on("close", (code) => {
-        const videoUrl = output.trim().split("\n")[0] || null;
-        if (code !== 0 || !videoUrl || !videoUrl.startsWith("http")) {
-          console.log("yt-dlp did not return a video URL:", errOutput.slice(0, 200));
-          resolve(null);
-        } else {
-          console.log("✅ yt-dlp extracted video URL:", videoUrl.slice(0, 80) + "...");
-          resolve(videoUrl);
-        }
-      });
-      proc.on("error", (err) => {
-        console.log("yt-dlp spawn error (not installed?):", err.message);
-        resolve(null);
-      });
-      // Safety timeout — don't block the whole save for more than 30s
-      setTimeout(() => { proc.kill(); resolve(null); }, 30000);
-    } catch (err) {
-      console.log("extractInstagramVideoUrl error:", err.message);
-      resolve(null);
+      ]),
+      // safety timeout — never block longer than 30 s
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("yt-dlp timeout")), 30000)
+      ),
+    ]);
+    const videoUrl = (output || "").trim().split("\n")[0] || null;
+    if (!videoUrl || !videoUrl.startsWith("http")) {
+      console.log("yt-dlp did not return a valid video URL");
+      return null;
     }
-  });
+    console.log("✅ yt-dlp extracted video URL:", videoUrl.slice(0, 80) + "...");
+    return videoUrl;
+  } catch (err) {
+    console.log("yt-dlp extraction failed:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Scrape the Instagram page HTML to find the direct video CDN URL from meta tags.
+ * Tries multiple user-agents. Returns null if not found.
+ */
+async function scrapeInstagramVideoUrl(url) {
+  const userAgents = [
+    // WhatsApp link preview bot — Instagram serves OG tags to this
+    "WhatsApp/2.23.20.0 A",
+    // Googlebot
+    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+    // Twitterbot
+    "Twitterbot/1.0",
+    // facebookexternalhit
+    "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+  ];
+
+  for (const ua of userAgents) {
+    try {
+      const { data: html } = await axios.get(url, {
+        timeout: 10000,
+        maxRedirects: 5,
+        headers: {
+          "User-Agent": ua,
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+      });
+      const $ = cheerio.load(html);
+      const videoUrl =
+        $("meta[property='og:video:secure_url']").attr("content") ||
+        $("meta[property='og:video']").attr("content") ||
+        $("meta[name='twitter:player:stream']").attr("content") ||
+        "";
+      if (videoUrl && videoUrl.startsWith("http")) {
+        console.log("✅ Scraped CDN video URL via meta tag (", ua.slice(0, 20), ")");
+        return videoUrl;
+      }
+    } catch { /* try next UA */ }
+  }
+  return null;
+}
+
+/**
+ * Get the Instagram video CDN URL.
+ * Step 1: scrape og:video meta tags (no binary needed).
+ * Step 2: fall back to yt-dlp (downloads binary once on first use).
+ */
+async function getInstagramVideoUrl(url) {
+  const scraped = await scrapeInstagramVideoUrl(url);
+  if (scraped) return scraped;
+  console.log("Meta-tag scrape found no video URL, trying yt-dlp...");
+  return extractInstagramVideoUrl(url);
 }
 
 /**
@@ -130,8 +205,8 @@ async function extractInstagram(url) {
       } catch { }
     }
 
-    // Run yt-dlp extraction in parallel (doesn't block oembed result)
-    const videoUrl = await extractInstagramVideoUrl(url);
+    // Get video CDN URL: scrape og:video first, yt-dlp as fallback
+    const videoUrl = await getInstagramVideoUrl(url);
 
     return {
       title,
@@ -178,7 +253,7 @@ async function extractInstagram(url) {
     }
     // Still attempt video extraction even when oembed failed
     if (!scraped.video_url) {
-      scraped.video_url = await extractInstagramVideoUrl(url) || "";
+      scraped.video_url = await getInstagramVideoUrl(url) || "";
     }
     return scraped;
   }
@@ -344,6 +419,11 @@ async function scrapeMetaTags(url) {
       $('meta[property="og:image"]').attr("content") ||
       $('meta[name="twitter:image"]').attr("content") ||
       "";
+    const video =
+      $('meta[property="og:video:secure_url"]').attr("content") ||
+      $('meta[property="og:video"]').attr("content") ||
+      $('meta[name="twitter:player:stream"]').attr("content") ||
+      "";
     const author =
       $('meta[name="author"]').attr("content") ||
       $('meta[property="article:author"]').attr("content") ||
@@ -353,6 +433,7 @@ async function scrapeMetaTags(url) {
       title: title.trim() || "Untitled",
       caption: description.trim(),
       thumbnail: image,
+      video_url: video || "",
       author,
       embed_url: url,
       raw_data: { title: title.trim(), description: description.trim(), image },

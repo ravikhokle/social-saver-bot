@@ -53,6 +53,15 @@ export default function DashboardPage() {
     fetchCategories().then(setCategories).catch(console.error);
   };
 
+  const handlePin = (id: string, pinnedValue: boolean) => {
+    setBookmarks((prev) =>
+      prev
+        .map((b) => (b._id === id ? { ...b, pinned: pinnedValue } : b))
+        .sort((a, b) => Number(b.pinned) - Number(a.pinned))
+    );
+    fetchStats().then(setStats).catch(console.error);
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Hero header */}
@@ -101,6 +110,7 @@ export default function DashboardPage() {
           platform={platform}
           onPlatformChange={(p) => { setPlatform(p); setPage(1); }}
           onDelete={handleDelete}
+          onPin={handlePin}
         />
       )}
 

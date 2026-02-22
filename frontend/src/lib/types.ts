@@ -16,6 +16,7 @@ export interface Bookmark {
   videoUrl?: string;
   embedUrl: string;
   author: string;
+  pinned: boolean;
   rawData: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -35,6 +36,7 @@ export interface CategoryCount {
 
 export interface Stats {
   total: number;
+  pinned: number;
   platforms: Record<string, number>;
   topCategories: CategoryCount[];
 }

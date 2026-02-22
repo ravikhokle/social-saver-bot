@@ -53,6 +53,19 @@ export async function deleteBookmark(id: string) {
   return res.json();
 }
 
+export async function togglePin(id: string, pinned: boolean) {
+  const res = await fetch(`${API_URL}/bookmarks/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pinned }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to update bookmark");
+  }
+  return res.json();
+}
+
 export async function testSaveUrl(url: string, phone?: string) {
   const res = await fetch(`${API_URL}/webhook/test`, {
     method: "POST",
