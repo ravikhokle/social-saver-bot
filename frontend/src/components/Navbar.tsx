@@ -22,10 +22,7 @@ export default function Navbar() {
               <Sparkles className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold gradient-text">Social Saver</h1>
-              <p className="text-[10px] text-muted -mt-0.5 tracking-wide uppercase">
-                Knowledge Base
-              </p>
+              <h1 className="text-lg font-bold gradient-text">Social Saver Bot</h1>
             </div>
           </Link>
 
@@ -38,8 +35,8 @@ export default function Navbar() {
                   key={href}
                   href={href}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${isActive
-                      ? "bg-primary/15 text-primary"
-                      : "text-muted hover:text-foreground hover:bg-white/5"
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted hover:text-foreground hover:bg-white/5"
                     }`}
                 >
                   <Icon className="w-4 h-4" />

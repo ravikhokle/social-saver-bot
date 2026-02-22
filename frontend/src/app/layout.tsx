@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Social Saver — Your Knowledge Base",
+  title: "Social Saver Bot",
   description:
     "Turn saved Instagram Reels, Tweets, and articles into a searchable personal dashboard.",
 };

@@ -1,11 +1,6 @@
-// switch to official Gemini SDK; still use axios for OpenAI
+// Gemini via official SDK; Cohere via axios
 import axios from "axios";
 import { GoogleGenAI } from "@google/genai";
-
-/**
- * Delay helper for retry/backoff
- */
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // initialize Gemini client once (picks up GEMINI_API_KEY automatically if set)
 const geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -14,60 +9,34 @@ const geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
  * Use AI to auto-tag and summarize content
  */
 async function analyzeContent({ title, caption, platform, url }) {
-  // Include caption, title, and URL so AI has maximum context
   const textToAnalyze = [caption, title, url].filter(Boolean).join(" ").trim();
 
   if (!textToAnalyze) {
-    return {
-      category: "Uncategorized",
-      tags: [],
-      summary: "No content available to summarize.",
-    };
+    return { category: "Uncategorized", tags: [], summary: "No content available to summarize." };
   }
 
-  const provider = process.env.AI_PROVIDER || "gemini";
-
-  // Try primary provider
-  try {
-    if (provider === "openai") {
-      return await analyzeWithOpenAI(textToAnalyze, platform);
-    } else {
+  // 1️⃣ Always try Gemini first
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      console.log("🤖 Trying Gemini...");
       return await analyzeWithGemini(textToAnalyze, platform);
-    }
-  } catch (err) {
-    console.error(`Primary AI (${provider}) failed:`, err.message);
-    if (err.response && err.response.data) {
-      console.error("Primary error details:", err.response.data);
+    } catch (err) {
+      console.warn("⚠️ Gemini failed:", err.message?.slice(0, 120));
     }
   }
 
-  // Try fallback provider
-  try {
-    if (provider === "openai" && process.env.GEMINI_API_KEY) {
-      console.log("Falling back to Gemini...");
-      return await analyzeWithGemini(textToAnalyze, platform);
-    } else if (provider === "gemini" && process.env.OPENAI_API_KEY) {
-      console.log("Falling back to OpenAI...");
-      return await analyzeWithOpenAI(textToAnalyze, platform);
+  // 2️⃣ Try Cohere (free tier)
+  if (process.env.COHERE_API_KEY) {
+    try {
+      console.log("🤖 Trying Cohere...");
+      return await analyzeWithCohere(textToAnalyze, platform);
+    } catch (err) {
+      console.warn("⚠️ Cohere failed:", err.response?.data?.message || err.message?.slice(0, 120));
     }
-  } catch (err2) {
-    console.error("Fallback AI also failed:", err2.message);
   }
 
-  // If both providers fail, retry primary once after a short delay
-  try {
-    console.log("⏳ Waiting 3s and retrying primary AI...");
-    await delay(3000);
-    if (provider === "openai") {
-      return await analyzeWithOpenAI(textToAnalyze, platform);
-    } else {
-      return await analyzeWithGemini(textToAnalyze, platform);
-    }
-  } catch (retryErr) {
-    console.error("Retry also failed:", retryErr.message);
-  }
-
-  console.log("🔧 Using keyword-based fallback analysis");
+  // 3️⃣ All AI providers failed — use keyword-based fallback
+  console.log("🔧 All AI providers failed, using keyword-based fallback analysis");
   return fallbackAnalysis(textToAnalyze, platform, url);
 }
 
@@ -86,31 +55,30 @@ IMPORTANT:
 - If caption is empty, infer meaning from the URL or author name.
 - NEVER use generic titles like "Instagram Reel" or "Social Media Post".`;
 
-async function analyzeWithOpenAI(text, platform) {
+
+async function analyzeWithCohere(text, platform) {
+  const model = process.env.COHERE_MODEL || "command-r";
   const res = await axios.post(
-    "https://api.openai.com/v1/chat/completions",
+    "https://api.cohere.com/v2/chat",
     {
-      model: "gpt-3.5-turbo",
+      model,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: `Platform: ${platform}\nContent: ${text.slice(0, 1000)}`,
-        },
+        { role: "user", content: `Platform: ${platform}\nContent: ${text.slice(0, 1000)}` },
       ],
       temperature: 0.3,
       max_tokens: 200,
     },
     {
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${process.env.COHERE_API_KEY}`,
         "Content-Type": "application/json",
       },
       timeout: 15000,
     }
   );
-
-  const raw = res.data.choices[0].message.content.trim();
+  const raw = res.data.message.content[0].text.trim();
+  console.log(`✅ Cohere model "${model}" returned`);
   return parseAIResponse(raw);
 }
 
@@ -119,19 +87,21 @@ async function analyzeWithOpenAI(text, platform) {
  */
 async function analyzeWithGemini(text, platform) {
   // prefer the newest model; can be overridden via env
-  const model = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
+  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
   const prompt = `${SYSTEM_PROMPT}\n\nPlatform: ${platform}\nContent: ${text.slice(0, 1000)}`;
 
   try {
     const response = await geminiClient.models.generateContent({
       model,
       contents: prompt,
-      temperature: 0.3,
-      maxOutputTokens: 200,
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 200,
+      },
     });
 
-    // the SDK returns the generated text in `response.text`
-    let raw = (response && response.text) ? response.text.trim() : "";
+    // SDK exposes the text via the .text property (getter)
+    const raw = response.text ? response.text.trim() : "";
     console.log(`✅ Gemini SDK model "${model}" returned`);
     return parseAIResponse(raw);
   } catch (err) {
