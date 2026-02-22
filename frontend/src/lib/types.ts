@@ -13,6 +13,7 @@ export interface Bookmark {
   category: string;
   tags: string[];
   thumbnail: string;
+  videoUrl?: string;
   embedUrl: string;
   author: string;
   rawData: Record<string, unknown>;

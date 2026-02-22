@@ -1,5 +1,6 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
+import { spawn } from "child_process";
 
 /**
  * Detect platform from URL
@@ -27,6 +28,47 @@ function titleFromUrl(url) {
   } catch {
     return "Saved Link";
   }
+}
+
+/**
+ * Use yt-dlp to extract the direct CDN video URL for an Instagram post/reel.
+ * Returns null gracefully if yt-dlp is not installed or the post is private.
+ */
+async function extractInstagramVideoUrl(url) {
+  return new Promise((resolve) => {
+    try {
+      const proc = spawn("python", [
+        "-m", "yt_dlp",
+        "--get-url",
+        "--format", "mp4",
+        "--no-playlist",
+        url,
+      ]);
+      let output = "";
+      let errOutput = "";
+      proc.stdout.on("data", (d) => (output += d.toString()));
+      proc.stderr.on("data", (d) => (errOutput += d.toString()));
+      proc.on("close", (code) => {
+        const videoUrl = output.trim().split("\n")[0] || null;
+        if (code !== 0 || !videoUrl || !videoUrl.startsWith("http")) {
+          console.log("yt-dlp did not return a video URL:", errOutput.slice(0, 200));
+          resolve(null);
+        } else {
+          console.log("✅ yt-dlp extracted video URL:", videoUrl.slice(0, 80) + "...");
+          resolve(videoUrl);
+        }
+      });
+      proc.on("error", (err) => {
+        console.log("yt-dlp spawn error (not installed?):", err.message);
+        resolve(null);
+      });
+      // Safety timeout — don't block the whole save for more than 30s
+      setTimeout(() => { proc.kill(); resolve(null); }, 30000);
+    } catch (err) {
+      console.log("extractInstagramVideoUrl error:", err.message);
+      resolve(null);
+    }
+  });
 }
 
 /**
@@ -88,12 +130,16 @@ async function extractInstagram(url) {
       } catch { }
     }
 
+    // Run yt-dlp extraction in parallel (doesn't block oembed result)
+    const videoUrl = await extractInstagramVideoUrl(url);
+
     return {
       title,
       caption,
       thumbnail,
       author,
       embed_url: embedUrl,
+      video_url: videoUrl || "",
       raw_data: data,
     };
   } catch (err) {
@@ -129,6 +175,10 @@ async function extractInstagram(url) {
     // Clean up captions that are just raw HTML/JS
     if (scraped.caption && scraped.caption.length > 500) {
       scraped.caption = scraped.caption.slice(0, 300) + "...";
+    }
+    // Still attempt video extraction even when oembed failed
+    if (!scraped.video_url) {
+      scraped.video_url = await extractInstagramVideoUrl(url) || "";
     }
     return scraped;
   }

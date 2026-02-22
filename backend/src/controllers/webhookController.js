@@ -111,6 +111,7 @@ export async function handleWhatsAppWebhook(req, res) {
           category: finalCategory,
           tags: analysis.tags || [],
           thumbnail: content.thumbnail || "",
+          videoUrl: content.video_url || "",
           embedUrl: content.embed_url || url,
           author: content.author || "",
           rawData: content.raw_data || {},
@@ -132,7 +133,7 @@ export async function handleWhatsAppWebhook(req, res) {
           `📝 ${analysis.summary}\n\n` +
           `🏷️ Tags: ${(analysis.tags || []).join(", ") || "none"}\n\n` +
           `View your saved links at: ${process.env.FRONTEND_URL ||
-            "http://localhost:3000"}`;
+          "http://localhost:3000"}`;
       } catch (extractErr) {
         console.error("Error processing URL:", extractErr);
         replyMessage =
@@ -210,6 +211,7 @@ export async function handleTestWebhook(req, res) {
       category: finalCategory,
       tags: analysis.tags || [],
       thumbnail: content.thumbnail || "",
+      videoUrl: content.video_url || "",
       embedUrl: content.embed_url || url,
       author: content.author || "",
       rawData: content.raw_data || {},

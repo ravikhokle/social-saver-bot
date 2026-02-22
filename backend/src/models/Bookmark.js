@@ -43,6 +43,10 @@ const bookmarkSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    videoUrl: {
+      type: String,
+      default: "",
+    },
     embedUrl: {
       type: String,
       default: "",
