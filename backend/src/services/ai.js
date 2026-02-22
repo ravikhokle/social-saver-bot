@@ -8,7 +8,7 @@ const geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 /**
  * Use AI to auto-tag and summarize content
  */
-async function analyzeContent({ title, caption, platform, url }) {
+async function analyzeContent({ title, caption, platform, url, author }) {
   const textToAnalyze = [caption, title, url].filter(Boolean).join(" ").trim();
 
   if (!textToAnalyze) {
@@ -19,7 +19,7 @@ async function analyzeContent({ title, caption, platform, url }) {
   if (process.env.GEMINI_API_KEY) {
     try {
       console.log("🤖 Trying Gemini...");
-      return await analyzeWithGemini(textToAnalyze, platform);
+      return await analyzeWithGemini(textToAnalyze, platform, { author, url });
     } catch (err) {
       console.warn("⚠️ Gemini failed:", err.message?.slice(0, 120));
     }
@@ -29,7 +29,7 @@ async function analyzeContent({ title, caption, platform, url }) {
   if (process.env.COHERE_API_KEY) {
     try {
       console.log("🤖 Trying Cohere...");
-      return await analyzeWithCohere(textToAnalyze, platform);
+      return await analyzeWithCohere(textToAnalyze, platform, { author, url });
     } catch (err) {
       console.warn("⚠️ Cohere failed:", err.response?.data?.message || err.message?.slice(0, 120));
     }
@@ -40,23 +40,67 @@ async function analyzeContent({ title, caption, platform, url }) {
   return fallbackAnalysis(textToAnalyze, platform, url);
 }
 
-const SYSTEM_PROMPT = `You are a content classifier. Given social media content (caption, title, URL), respond ONLY with valid JSON (no markdown, no code fences):
+const SYSTEM_PROMPT = `You are an expert content classifier for a social media bookmark app. Given post content, return ONLY valid JSON (no markdown, no code fences).
+
+Required JSON shape:
 {
-  "title": "A short, descriptive title based on the actual content/caption (NOT generic like 'Instagram Reel')",
-  "category": "one of: Fitness, Coding, Food, Travel, Design, Music, Fashion, Education, Business, Entertainment, Science, Lifestyle, Uncategorized",
-  "tags": ["tag1", "tag2", "tag3"],
-  "summary": "A single concise sentence summarizing the content. Use key words from the caption so the user can search for it later."
+  "title": "...",
+  "category": "...",
+  "tags": ["...", "...", "..."],
+  "summary": "..."
 }
 
-IMPORTANT:
-- The title MUST describe what the content is about, using keywords from the caption.
-- The summary MUST include important words from the caption so it is searchable.
-- Tags MUST include relevant keywords from the caption text.
-- If caption is empty, infer meaning from the URL or author name.
-- NEVER use generic titles like "Instagram Reel" or "Social Media Post".`;
+--- TITLE RULES ---
+- 4 to 10 words, natural and descriptive.
+- Must reflect the ACTUAL topic/subject of the post, not the platform or format.
+- Use important keywords from the caption so the user recognises the content.
+- Do NOT start with: "Instagram", "Twitter", "YouTube", "Reel", "Post", "Video", "A post about".
+- Do NOT use clickbait or vague phrases like "You won't believe" or "Amazing content".
+- If the caption is empty, infer from the author name and URL slug.
+- Examples of GOOD titles: "How to Build a REST API in Node.js", "5 Minute Leg Workout for Beginners", "Homemade Sourdough Bread Recipe"
+
+--- CATEGORY RULES ---
+Pick exactly ONE from this list:
+Fitness, Coding, Food, Travel, Design, Music, Fashion, Education, Business, Finance, Entertainment, Science, Lifestyle, Health, Gaming, Photography, Motivation, Productivity, News, Cooking
+- Choose the most specific matching category.
+- "Education" = tutorials, explanations, how-to guides.
+- "Coding" = programming, software, tech tools.
+- "Finance" = money, investing, crypto, trading.
+- If nothing fits well, use "Lifestyle".
+
+--- TAG RULES ---
+- 3 to 6 tags, all lowercase.
+- Include the real hashtags from the caption (without the # symbol).
+- Add topic/concept tags inferred from the content (e.g. "system design", "node.js", "interview prep").
+- Tags can be multi-word (e.g. "event loop", "weight loss").
+- Do NOT include generic noise tags: viral, trending, fyp, foryou, explorepage, follow, like, share, reels, instagood.
+
+--- SUMMARY RULES ---
+- 1 to 2 sentences max.
+- Must include key topic words from the caption so it is searchable later.
+- Write in third-person or neutral tone (no "I" or "you").
+- Do NOT just repeat the title. Add context about what the viewer learns or sees.
+`;
+
+/**
+ * Build the user message for AI — structured for clarity
+ */
+function buildUserMessage(text, platform, { author, url } = {}) {
+  const hashtags = (text.match(/#[a-zA-Z][a-zA-Z0-9_]*/g) || []).join(" ");
+  // Strip hashtag block from caption so the main text is cleaner
+  const cleanText = text.replace(/(#[a-zA-Z][a-zA-Z0-9_]*\s*)+/g, " ").replace(/\s+/g, " ").trim();
+  const lines = [
+    `Platform: ${platform}`,
+    author ? `Creator: ${author}` : null,
+    `URL: ${url || ""}`,
+    `Caption/Text: ${cleanText.slice(0, 800)}`,
+    hashtags ? `Hashtags in post: ${hashtags}` : null,
+  ].filter(Boolean);
+  return lines.join("\n");
+}
 
 
-async function analyzeWithCohere(text, platform) {
+async function analyzeWithCohere(text, platform, meta = {}) {
   const model = process.env.COHERE_MODEL || "command-r";
   const res = await axios.post(
     "https://api.cohere.com/v2/chat",
@@ -64,10 +108,10 @@ async function analyzeWithCohere(text, platform) {
       model,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `Platform: ${platform}\nContent: ${text.slice(0, 1000)}` },
+        { role: "user", content: buildUserMessage(text, platform, meta) },
       ],
-      temperature: 0.3,
-      max_tokens: 200,
+      temperature: 0.2,
+      max_tokens: 350,
     },
     {
       headers: {
@@ -85,18 +129,18 @@ async function analyzeWithCohere(text, platform) {
 /**
  * Try multiple Gemini models — different models may have separate rate limits
  */
-async function analyzeWithGemini(text, platform) {
+async function analyzeWithGemini(text, platform, meta = {}) {
   // prefer the newest model; can be overridden via env
   const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
-  const prompt = `${SYSTEM_PROMPT}\n\nPlatform: ${platform}\nContent: ${text.slice(0, 1000)}`;
+  const prompt = `${SYSTEM_PROMPT}\n\n${buildUserMessage(text, platform, meta)}`;
 
   try {
     const response = await geminiClient.models.generateContent({
       model,
       contents: prompt,
       generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 200,
+        temperature: 0.2,
+        maxOutputTokens: 350,
       },
     });
 
@@ -120,10 +164,17 @@ function parseAIResponse(raw) {
   raw = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
   const parsed = JSON.parse(raw);
   return {
-    title: parsed.title || "",
+    title: (parsed.title || "").trim(),
     category: parsed.category || "Uncategorized",
-    tags: Array.isArray(parsed.tags) ? parsed.tags.slice(0, 5) : [],
-    summary: parsed.summary || "",
+    tags: Array.isArray(parsed.tags)
+      ? parsed.tags
+          .map((t) => t.toLowerCase().trim())
+          .filter((t) => t.length > 1 && ![
+            "viral","trending","fyp","foryou","explorepage","follow","like","share","reels","instagood","love"
+          ].includes(t))
+          .slice(0, 6)
+      : [],
+    summary: (parsed.summary || "").trim(),
   };
 }
 
@@ -195,63 +246,83 @@ function fallbackAnalysis(rawText, platform, url) {
   const categories = {
     Fitness: [
       "workout", "gym", "exercise", "fitness", "muscle", "cardio", "yoga",
-      "running", "abs", "bodybuilding", "stretch", "health", "weight loss",
-      "training", "sport", "protein", "diet", "hiit", "crossfit", "squat",
-      "push up", "pull up", "calories", "reps", "sets", "plank", "deadlift",
+      "running", "abs", "bodybuilding", "stretch", "weight loss",
+      "training", "protein", "hiit", "crossfit", "squat",
+      "push up", "pull up", "calories", "reps", "plank", "deadlift",
     ],
     Coding: [
       "code", "coding", "programming", "developer", "javascript", "python", "react",
       "api", "github", "software", "algorithm", "frontend", "backend",
       "devops", "debug", "html", "css", "node", "database", "typescript",
-      "rust", "golang", "nextjs", "deploy", "java", "kotlin", "swift",
-      "flutter", "docker", "kubernetes", "git", "open source", "terminal",
-      "function", "class", "object", "array", "loop", "variable", "boolean",
-      "string[]", "main method", "static void", "public class",
+      "rust", "golang", "nextjs", "java", "kotlin", "swift",
+      "flutter", "docker", "kubernetes", "git", "open source",
+      "function", "class", "object", "array", "loop",
+      "system design", "data structure", "leetcode", "dsa",
     ],
     Food: [
       "recipe", "cook", "food", "meal", "pasta", "restaurant", "eat",
-      "kitchen", "bake", "delicious", "dinner", "lunch", "breakfast",
-      "snack", "chef", "vegan", "pizza", "salad", "healthy eating", "cuisine",
-      "ingredient", "flavour", "flavor", "dessert", "smoothie", "coffee",
+      "bake", "delicious", "dinner", "lunch", "breakfast",
+      "snack", "chef", "vegan", "pizza", "salad", "cuisine",
+      "ingredient", "dessert", "smoothie", "coffee",
+    ],
+    Cooking: [
+      "how to cook", "cooking tutorial", "cooking tips", "homemade", "kitchen hack",
+      "stir fry", "grilling", "baking tips", "sourdough", "meal prep",
+      "knife skills", "seasoning", "sauce", "marinade",
     ],
     Travel: [
       "travel", "trip", "destination", "flight", "hotel", "explore",
       "adventure", "tourism", "beach", "mountain", "vacation", "hiking",
-      "road trip", "wanderlust", "itinerary", "passport", "visa",
+      "road trip", "wanderlust", "itinerary", "passport",
       "backpacking", "hostel", "resort", "sightseeing", "landmark",
     ],
     Design: [
       "design", "ui", "ux", "figma", "typography", "layout", "creative",
       "graphic", "branding", "logo", "illustration", "photoshop", "canva",
-      "wireframe", "prototype", "color palette", "design system", "font",
-      "visual", "mockup", "component", "animation", "motion",
+      "wireframe", "prototype", "color palette", "design system",
+      "mockup", "animation", "motion",
+    ],
+    Photography: [
+      "photography", "photo", "camera", "lens", "lightroom", "editing photo",
+      "portrait", "landscape photo", "street photography", "composition",
+      "exposure", "shutter speed", "iso", "aperture",
     ],
     Music: [
       "music", "song", "album", "playlist", "concert", "artist", "beat",
       "rapper", "singer", "guitar", "lyrics", "melody", "spotify",
-      "hip hop", "rock", "pop", "jazz", "producer", "studio", "track",
-      "bass", "drum", "piano", "vocals", "mixtape",
+      "hip hop", "rock", "pop", "jazz", "producer", "studio",
+      "bass", "drum", "piano", "vocals",
     ],
     Fashion: [
       "fashion", "outfit", "ootd", "style", "clothing", "wear", "trend",
       "dress", "shoes", "streetwear", "luxury", "accessories", "wardrobe",
-      "model", "lookbook", "collection", "brand", "couture",
+      "model", "lookbook", "collection", "brand",
     ],
     Education: [
       "learn", "study", "course", "tutorial", "guide", "tips", "how to",
-      "lesson", "teach", "knowledge", "university", "student", "lecture",
+      "lesson", "teach", "university", "student", "lecture",
       "skill", "certification", "bootcamp", "explained", "basics",
-      "beginner", "advanced", "concept", "theory", "exam", "quiz",
+      "beginner", "advanced", "concept", "theory", "exam",
     ],
     Business: [
-      "startup", "business", "entrepreneur", "marketing", "money", "invest",
-      "finance", "stock", "crypto", "revenue", "growth", "sales", "brand",
-      "linkedin", "saas", "product", "founder", "profit", "passive income",
-      "e-commerce", "shopify", "monetize", "client", "freelance",
+      "startup", "business", "entrepreneur", "marketing",
+      "revenue", "growth", "sales", "brand",
+      "saas", "product", "founder", "client", "freelance",
+      "e-commerce", "shopify", "monetize",
+    ],
+    Finance: [
+      "money", "invest", "finance", "stock", "crypto", "trading",
+      "wealth", "profit", "passive income", "budget", "savings",
+      "portfolio", "dividend", "forex", "nft", "defi", "blockchain",
+    ],
+    Gaming: [
+      "game", "gaming", "gamer", "esports", "playstation", "xbox", "pc gaming",
+      "minecraft", "fortnite", "valorant", "roblox", "twitch", "streamer",
+      "fps", "rpg", "console", "controller",
     ],
     Entertainment: [
       "movie", "film", "show", "netflix", "anime", "meme", "funny",
-      "comedy", "game", "gaming", "celebrity", "viral", "drama",
+      "comedy", "celebrity", "drama",
       "series", "trailer", "review", "reaction", "prank", "challenge",
     ],
     Science: [
@@ -260,11 +331,28 @@ function fallbackAnalysis(rawText, platform, url) {
       "machine learning", "neuroscience", "climate", "quantum", "rocket",
       "atom", "dna", "evolution", "mathematics",
     ],
+    Health: [
+      "health", "mental health", "anxiety", "depression", "therapy",
+      "sleep", "nutrition", "immune", "gut health", "supplements",
+      "vitamins", "hydration", "stress", "wellness check",
+    ],
+    Motivation: [
+      "motivation", "inspire", "mindset", "discipline", "grind",
+      "success", "goals", "consistency", "hard work", "focus",
+      "positive", "growth mindset", "never give up",
+    ],
+    Productivity: [
+      "productivity", "time management", "focus", "deep work", "pomodoro",
+      "habit", "morning routine", "to do list", "planning", "system",
+      "workflow", "tools", "automation", "notion", "obsidian",
+    ],
     Lifestyle: [
-      "lifestyle", "motivation", "mindset", "self improvement", "morning routine",
-      "productivity", "wellness", "meditation", "gratitude", "habit",
-      "minimalism", "home decor", "relationship", "mental health", "anxiety",
-      "confidence", "journaling", "routine", "balance", "self care",
+      "lifestyle", "self improvement", "self care", "meditation", "gratitude",
+      "minimalism", "home decor", "relationship", "journaling", "routine", "balance",
+    ],
+    News: [
+      "news", "breaking", "update", "report", "latest", "today",
+      "politics", "economy", "government", "election", "headline",
     ],
   };
 

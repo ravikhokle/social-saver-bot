@@ -68,6 +68,7 @@ export async function handleWhatsAppWebhook(req, res) {
           title: content.title,
           caption: content.caption,
           platform: content.platform,
+          author: content.author,
           url,
         });
 
@@ -89,16 +90,15 @@ export async function handleWhatsAppWebhook(req, res) {
             : analysis.title || "Untitled";
         }
 
-        // finalize category if AI left it uncategorized for reels
+        // finalize category if AI left it uncategorized
         let finalCategory = analysis.category || "Uncategorized";
-        // Instagram reels: always Entertainment
-        if (
-          finalCategory === "Uncategorized" &&
-          content.platform === "instagram" &&
-          /instagram\.com\/reel\//i.test(url)
-        ) {
-          finalCategory = "Entertainment";
-        }
+        const validCategories = [
+          "Fitness", "Coding", "Food", "Cooking", "Travel", "Design", "Photography",
+          "Music", "Fashion", "Education", "Business", "Finance", "Gaming",
+          "Entertainment", "Science", "Health", "Motivation", "Productivity",
+          "Lifestyle", "News",
+        ];
+        if (!validCategories.includes(finalCategory)) finalCategory = "Uncategorized";
 
         // Save to MongoDB
         const bookmark = await Bookmark.create({
@@ -170,6 +170,7 @@ export async function handleTestWebhook(req, res) {
       title: content.title,
       caption: content.caption,
       platform: content.platform,
+      author: content.author,
       url,
     });
 
@@ -193,12 +194,13 @@ export async function handleTestWebhook(req, res) {
 
     // finalize category
     let finalCategory = analysis.category || "Uncategorized";
-    if (
-      finalCategory === "Uncategorized" &&
-      content.platform === "instagram"
-    ) {
-      finalCategory = "Entertainment";
-    }
+    const validCategories = [
+      "Fitness", "Coding", "Food", "Cooking", "Travel", "Design", "Photography",
+      "Music", "Fashion", "Education", "Business", "Finance", "Gaming",
+      "Entertainment", "Science", "Health", "Motivation", "Productivity",
+      "Lifestyle", "News",
+    ];
+    if (!validCategories.includes(finalCategory)) finalCategory = "Uncategorized";
 
     // Save
     const bookmark = await Bookmark.create({

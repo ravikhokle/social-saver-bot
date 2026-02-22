@@ -48,7 +48,21 @@ export default function DashboardPage() {
   }, []);
 
   const handleDelete = (id: string) => {
-    setBookmarks((prev) => prev.filter((b) => b._id !== id));
+    // Optimistically remove from UI instantly (no flash)
+    const remaining = bookmarks.filter((b) => b._id !== id);
+    setBookmarks(remaining);
+
+    // Silently fetch the updated page in the background to fill the gap
+    if (remaining.length === 0 && page > 1) {
+      setPage((p) => p - 1);
+    } else {
+      fetchBookmarks({ search, category, platform, page, limit: 9 })
+        .then((data) => {
+          setBookmarks(data.bookmarks);
+          setTotalPages(data.totalPages ?? 1);
+        })
+        .catch(console.error);
+    }
     fetchStats().then(setStats).catch(console.error);
     fetchCategories().then(setCategories).catch(console.error);
   };

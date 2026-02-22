@@ -16,7 +16,6 @@ frontend/out/
 # Build output
 dist/
 build/
-backend/bin
 
 # Debug logs
 npm-debug.log*
