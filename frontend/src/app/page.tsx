@@ -7,7 +7,8 @@ import StatsCards from "@/components/StatsCards";
 import SearchBar from "@/components/SearchBar";
 import CategoryFilter from "@/components/CategoryFilter";
 import BookmarkGrid from "@/components/BookmarkGrid";
-import { Loader2, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
+import BookmarkSkeleton from "@/components/BookmarkSkeleton";
 
 export default function DashboardPage() {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
@@ -67,6 +68,11 @@ export default function DashboardPage() {
     fetchCategories().then(setCategories).catch(console.error);
   };
 
+  const handleTagClick = (tag: string) => {
+    setSearch(tag);
+    setPage(1);
+  };
+
   const handlePin = (id: string, pinnedValue: boolean) => {
     setBookmarks((prev) =>
       prev
@@ -115,8 +121,8 @@ export default function DashboardPage() {
 
       {/* Bookmarks grid */}
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {Array.from({ length: 9 }).map((_, i) => <BookmarkSkeleton key={i} />)}
         </div>
       ) : (
         <BookmarkGrid
@@ -125,6 +131,7 @@ export default function DashboardPage() {
           onPlatformChange={(p) => { setPlatform(p); setPage(1); }}
           onDelete={handleDelete}
           onPin={handlePin}
+          onTagClick={handleTagClick}
         />
       )}
 

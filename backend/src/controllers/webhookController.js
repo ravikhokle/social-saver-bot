@@ -114,6 +114,7 @@ export async function handleWhatsAppWebhook(req, res) {
           videoUrl: content.video_url || "",
           embedUrl: content.embed_url || url,
           author: content.author || "",
+          aiReason: analysis.aiReason || "",
           rawData: content.raw_data || {},
         });
 
@@ -216,6 +217,7 @@ export async function handleTestWebhook(req, res) {
       videoUrl: content.video_url || "",
       embedUrl: content.embed_url || url,
       author: content.author || "",
+      aiReason: analysis.aiReason || "",
       rawData: content.raw_data || {},
     });
 

@@ -17,6 +17,7 @@ export interface Bookmark {
   embedUrl: string;
   author: string;
   pinned: boolean;
+  aiReason: string;
   rawData: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;

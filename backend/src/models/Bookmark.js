@@ -55,6 +55,10 @@ const bookmarkSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    aiReason: {
+      type: String,
+      default: "",
+    },
     pinned: {
       type: Boolean,
       default: false,

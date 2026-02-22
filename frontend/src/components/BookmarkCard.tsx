@@ -14,9 +14,10 @@ import {
   Maximize,
   Pin,
   PinOff,
+  Info,
 } from "lucide-react";
 import { deleteBookmark, togglePin } from "@/lib/api";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 const platformConfig = {
   instagram: {
@@ -72,14 +73,23 @@ interface BookmarkCardProps {
   bookmark: Bookmark;
   onDelete?: (id: string) => void;
   onPin?: (id: string, pinned: boolean) => void;
+  onTagClick?: (tag: string) => void;
 }
 
-export default function BookmarkCard({ bookmark, onDelete, onPin }: BookmarkCardProps) {
+export default function BookmarkCard({ bookmark, onDelete, onPin, onTagClick }: BookmarkCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isPinning, setIsPinning] = useState(false);
   const [pinned, setPinned] = useState(bookmark.pinned ?? false);
   const [showModal, setShowModal] = useState(false);
+  const [toastError, setToastError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Auto-dismiss toast after 3 s
+  useEffect(() => {
+    if (!toastError) return;
+    const t = setTimeout(() => setToastError(null), 3000);
+    return () => clearTimeout(t);
+  }, [toastError]);
 
   const handleFullscreen = () => {
     const el = videoRef.current;
@@ -104,7 +114,7 @@ export default function BookmarkCard({ bookmark, onDelete, onPin }: BookmarkCard
       onPin?.(bookmark._id, next);
     } catch (err: any) {
       setPinned(!next); // revert on error
-      if (err?.message) alert(err.message);
+      if (err?.message) setToastError(err.message);
     } finally {
       setIsPinning(false);
     }
@@ -129,6 +139,15 @@ export default function BookmarkCard({ bookmark, onDelete, onPin }: BookmarkCard
     <div className="group relative glass rounded-2xl overflow-hidden card-hover">
       {/* Top gradient bar */}
       <div className={`h-1 bg-gradient-to-r ${config.color}`} />
+
+      {/* Inline toast — pin limit error etc. */}
+      {toastError && (
+        <div className="absolute top-2 left-2 right-2 z-20 flex items-center gap-2 px-3 py-2 rounded-xl bg-red-500/90 text-white text-xs font-medium shadow-lg backdrop-blur-sm">
+          <Info className="w-3.5 h-3.5 shrink-0" />
+          <span className="flex-1">{toastError}</span>
+          <button onClick={() => setToastError(null)}><X className="w-3 h-3" /></button>
+        </div>
+      )}
 
       {/* Pinned badge */}
       {pinned && (
@@ -470,24 +489,35 @@ export default function BookmarkCard({ bookmark, onDelete, onPin }: BookmarkCard
           </p>
         )}
 
-        {/* Category badge */}
+        {/* Category badge + AI reason */}
         <div className="flex items-center gap-2 mb-3">
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-medium">
             <Tag className="w-3 h-3" />
             {bookmark.category}
           </span>
+          {bookmark.aiReason && (
+            <div className="relative group/reason">
+              <Info className="w-3.5 h-3.5 text-muted/40 hover:text-muted cursor-help transition-colors" />
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 px-3 py-2 rounded-xl bg-card border border-border/60 text-[11px] text-muted leading-relaxed shadow-xl opacity-0 group-hover/reason:opacity-100 pointer-events-none transition-opacity z-30">
+                <p className="font-semibold text-foreground mb-0.5">AI Classification</p>
+                <p>{bookmark.aiReason}</p>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Tags */}
+        {/* Tags — click any tag to search it */}
         {bookmark.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-3">
             {bookmark.tags.slice(0, 4).map((tag, i) => (
-              <span
+              <button
                 key={i}
-                className="px-2 py-0.5 rounded-md bg-white/5 text-[11px] text-muted border border-border/50"
+                onClick={() => onTagClick?.(tag)}
+                className="px-2 py-0.5 rounded-md bg-white/5 text-[11px] text-muted border border-border/50 hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-colors cursor-pointer"
+                title={`Search "${tag}"`}
               >
                 #{tag}
-              </span>
+              </button>
             ))}
           </div>
         )}

@@ -47,7 +47,8 @@ Required JSON shape:
   "title": "...",
   "category": "...",
   "tags": ["...", "...", "..."],
-  "summary": "..."
+  "summary": "...",
+  "reason": "..."
 }
 
 --- TITLE RULES ---
@@ -80,6 +81,11 @@ Fitness, Coding, Food, Travel, Design, Music, Fashion, Education, Business, Fina
 - Must include key topic words from the caption so it is searchable later.
 - Write in third-person or neutral tone (no "I" or "you").
 - Do NOT just repeat the title. Add context about what the viewer learns or sees.
+
+--- REASON RULES ---
+- 1 short sentence (max 18 words) explaining WHY this category was chosen.
+- Cite specific words or phrases from the caption as evidence.
+- Example: "Classified as Coding because caption mentions 'system design', 'interview question', and 'software engineering'."
 `;
 
 /**
@@ -175,6 +181,7 @@ function parseAIResponse(raw) {
           .slice(0, 6)
       : [],
     summary: (parsed.summary || "").trim(),
+    aiReason: (parsed.reason || "").trim(),
   };
 }
 
@@ -398,6 +405,9 @@ function fallbackAnalysis(rawText, platform, url) {
     category: bestCategory,
     tags: allTags,
     summary,
+    aiReason: bestScore > 0
+      ? `Classified as ${bestCategory} based on keywords: ${matchedKeywords.slice(0, 3).join(", ")}.`
+      : "",
   };
 }
 
